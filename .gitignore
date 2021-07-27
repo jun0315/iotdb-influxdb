@@ -1,0 +1,35 @@
+**/logs/*
+**/lib/**
+**/data/**
+**/raft/**
+
+# Eclipse IDE files
+**/.classpath
+**/.project
+**/.settings/
+# src/main/resources/
+# intellij IDE files
+**/*.iml
+**/.idea/
+**/*.log
+**/*.ipr
+**/*.iws
+# Apple OS X related
+**/.DS_Store
+derby-tsfile-db
+
+# build generated
+**/target/
+
+*.jar
+*.gz
+*.tar.gz
+*.tar
+
+### vscode project
+**/.vscode/
+
+### Cmake files ###
+*.cmake
+Makefile
+**/CMakeFiles/
