@@ -9,6 +9,7 @@ import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.sql.Time;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -52,7 +53,7 @@ public class IotDBInfluxDBTest {
             types.add(TSDataType.INT64);
         }
 
-        for (long time = 0; time < 2000; time++) {
+        for (long time = 0; time < 200000; time++) {
             List<Object> values = new ArrayList<>();
             for (long i = 0; i < fieldNum + tagNum; i++) {
                 values.add(time);
@@ -77,7 +78,7 @@ public class IotDBInfluxDBTest {
                 types.add(TSDataType.INT64);
             }
 
-            for (long time = 0; time < 200; time++) {
+            for (long time = 0; time < 20000; time++) {
                 List<Object> values = new ArrayList<>();
                 for (long k = 0; k < fieldNum; k++) {
                     values.add(time);
@@ -116,19 +117,18 @@ public class IotDBInfluxDBTest {
         dataSet = session.executeQueryStatement("select * from root.teststress.test2.*.*.*.*.SL.*.*.* where A=1 and B=1 and C=1");
         dataSet = session.executeQueryStatement("select * from root.teststress.test2.*.*.*.*.SL.*.*.*.* where A=1 and B=1 and C=1");
         dataSet = session.executeQueryStatement("select * from root.teststress.test2.*.*.*.*.SL.*.*.*.*.* where A=1 and B=1 ");
-        dataSet = session.executeQueryStatement("select * from root.teststress.test2.* where A=1 and B=1 ");
         long after = System.currentTimeMillis();
         long duration = (after - before);
         System.out.println(duration);
-//        System.out.println(dataSet.getColumnNames());
-//        dataSet.setFetchSize(1024); // default is 10000
-//        int index = 0;
-//        while (dataSet.hasNext()) {
-////            System.out.println(dataSet.next());
-//            index++;
-//        }
-//        System.out.println(index);
-//
-//        dataSet.closeOperationHandle();
+        System.out.println(dataSet.getColumnNames());
+        dataSet.setFetchSize(1024); // default is 10000
+        int index = 0;
+        while (dataSet.hasNext()) {
+//            System.out.println(dataSet.next());
+            index++;
+        }
+        System.out.println(index);
+
+        dataSet.closeOperationHandle();
     }
 }

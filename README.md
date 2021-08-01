@@ -110,12 +110,12 @@ a. 添加时序
 
 5. 为了重启时候对table的恢复，在IoTDB中记录数据
 
-   | `root.TAG_INFO.measurement_name` | `root.TAG_INFO.tag_name` | `root.TAG_INFO.tag_order` |
-   | :------------------------------- | :----------------------- | :------------------------ |
-   | testdatabase_student             | name                     | 0                         |
-   | testdatabase_student             | phone                    | 1                         |
-   | testdatabase_student             | sex                      | 2                         |
-   | testdatabase_student             | address                  | 3                         |
+   | `root.TAG_INFO.database_name` | `root.TAG_INFO.measurement_name` | `root.TAG_INFO.tag_name` | `root.TAG_INFO.tag_order` |
+   | :------------------------------- | :------------------------------- | :----------------------- | :------------------------ |
+   | testdatabase| student             | name                     | 0                         |
+   | testdatabase| student             | phone                    | 1                         |
+   | testdatabase| student             | sex                      | 2                         |
+   | testdatabase| student             | address                  | 3                         |
 
 b. 查询数据
 
@@ -235,7 +235,7 @@ iotdb的写入数据为
 
 ### 5.4测试结果
 
-第一种查找的时间平均可以达到40ms附近，第二种查找的时间在200ms附近
+第一种查找的时间平均可以达到1000多ms，第二种查找的时间在300ms附近
 
 同时如果第二种查找的时候，在较靠前的路径使用*，(select * from root.teststress.test2.* where A=1 and B=1 )会导致需要查找的path过多，报错信息如下
 
