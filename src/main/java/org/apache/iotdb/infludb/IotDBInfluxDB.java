@@ -1,13 +1,16 @@
 package org.apache.iotdb.infludb;
 
+import org.apache.iotdb.infludb.influxql.expr.BinaryExpr;
+import org.apache.iotdb.infludb.influxql.expr.IntegerLiteral;
+import org.apache.iotdb.infludb.influxql.expr.StringLiteral;
+import org.apache.iotdb.infludb.influxql.expr.VarRef;
 import org.apache.iotdb.rpc.IoTDBConnectionException;
 import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.session.Session;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
-import org.influxdb.BatchOptions;
 import org.influxdb.InfluxDB;
-import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.*;
+import org.apache.iotdb.infludb.influxql.*;
 
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -16,10 +19,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 public class IotDBInfluxDB {
     private InfluxDB influxDB;
@@ -143,6 +143,27 @@ public class IotDBInfluxDB {
     }
 
     public QueryResult query(Query query) {
+
+        return null;
+    }
+
+    public QueryResult query() {
+//        BinaryExpr binaryExpr = new BinaryExpr();
+//        binaryExpr.Op = Token.AND;
+//        binaryExpr.LHS = new BinaryExpr(Token.GT, new VarRef("value", DataType.Unknown), new IntegerLiteral(10));
+//        binaryExpr.RHS = new BinaryExpr(Token.EQ, new VarRef("q", DataType.Unknown), new StringLiteral("hello"));
+        String database = "testdatabase";
+        String measurement = "student";
+
+
+        Map<String, String> tags = new HashMap<String, String>();
+        Map<String, Object> fields = new HashMap<String, Object>();
+        tags.put("name", "xie");
+        tags.put("sex", "m");
+
+        fields.put("score", "97");
+        fields.put("age", 22);
+        fields.put("num", 3.1);
         return null;
     }
 
@@ -173,6 +194,7 @@ public class IotDBInfluxDB {
                 var fields = result.next().getFields();
                 tagOrder.put(fields.get(2).getStringValue(), (int) fields.get(3).getFloatV());
             }
+            session.executeQueryStatement()
             measurementTagOrder.put(database, tagOrder);
         } catch (Exception e) {
             e.printStackTrace();
@@ -183,7 +205,9 @@ public class IotDBInfluxDB {
 
 
     public static void main(String[] args) throws IoTDBConnectionException, StatementExecutionException {
+
         var iotDBInfluxDB = new IotDBInfluxDB("http://127.0.0.1:6667", "root", "root");
+        iotDBInfluxDB.query();
         iotDBInfluxDB.setDatabase("testdatabase");
         Point.Builder builder = Point.measurement("student");
         Map<String, String> tags = new HashMap<String, String>();
@@ -199,6 +223,5 @@ public class IotDBInfluxDB {
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         Point point = builder.build();
         iotDBInfluxDB.write(point);
-//        io.write("1", point);
     }
 }
