@@ -10,7 +10,7 @@ import java.util.List;
 
 public class trys {
     public static void main(String[] args) {
-        String sql = "select * from cpu where host = 'serverA' or host='serverB' and (regions = 'us' or value=0.77)";
+        String sql = "select * from cpu where (host = 'serverA' and regions='us') or (regions = 'us' and value=0.77)";
 
         BinaryExpr binaryExpr = new BinaryExpr();
         binaryExpr.Op = Token.OR;

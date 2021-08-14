@@ -194,7 +194,6 @@ public class IotDBInfluxDB {
                 var fields = result.next().getFields();
                 tagOrder.put(fields.get(2).getStringValue(), (int) fields.get(3).getFloatV());
             }
-            session.executeQueryStatement()
             measurementTagOrder.put(database, tagOrder);
         } catch (Exception e) {
             e.printStackTrace();
