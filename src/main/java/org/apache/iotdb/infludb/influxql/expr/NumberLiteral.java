@@ -9,4 +9,8 @@ public class NumberLiteral implements Expr, Literal {
 
     public NumberLiteral() {
     }
+
+    public String toString() {
+        return String.valueOf(Val);
+    }
 }

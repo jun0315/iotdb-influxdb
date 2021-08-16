@@ -21,6 +21,14 @@ public final class IotDBInfluxDBUtils {
         }
     }
 
+    //如果当前字符串的第一个和最后一个是引号，则将其去除
+    public static String removeQuotation(String str) {
+        if (str.charAt(0) == '"' && str.charAt(str.length() - 1) == '"') {
+            return str.substring(1, str.length() - 1);
+        }
+        return str;
+    }
+
     //取并集
     public static SessionDataSet orProcess(SessionDataSet dataSet1, SessionDataSet dataSet2) {
         return dataSet1;

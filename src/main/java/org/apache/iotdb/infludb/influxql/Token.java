@@ -34,10 +34,10 @@ public enum Token {
     BITWISE_OR,// |
     BITWISE_XOR,// ^
 
-    AND,// AND
-    OR,// OR
+    AND("and"),// AND
+    OR("or"),// OR
 
-    EQ,// =
+    EQ("="),// =
     NEQ,// !=
     EQREGEX,// =~
     NEQREGEX,// !~
@@ -131,5 +131,21 @@ public enum Token {
     WHERE,
     WITH,
     WRITE,
-    keywordEnd,
+    keywordEnd;
+
+
+    String operate;
+
+    Token(String operate) {
+        this.operate = operate;
+    }
+
+    Token() {
+
+    }
+
+    public String getOperate() {
+        return this.operate;
+    }
+
 }

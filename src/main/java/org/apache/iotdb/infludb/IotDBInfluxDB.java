@@ -23,9 +23,10 @@ public class IotDBInfluxDB {
     private InfluxDB influxDB;
 
     private static Session session;
-    private String storageGroup;
     private String database;
+    private String measurement;
     private Map<String, Map<String, Integer>> measurementTagOrder = new HashMap<>();
+    private Map<String, Integer> tagOrders;
 
 
     private final String placeholder = "PH";
@@ -57,7 +58,7 @@ public class IotDBInfluxDB {
         Field[] reflectFields = point.getClass().getDeclaredFields();
         for (Field reflectField : reflectFields) {
             reflectField.setAccessible(true);
-            System.out.println(reflectField.getName() + ":" + reflectField.getType().getName());
+//            System.out.println(reflectField.getName() + ":" + reflectField.getType().getName());
             try {
                 if (reflectField.getType().getName().equalsIgnoreCase("java.util.Map") && reflectField.getName().equalsIgnoreCase("fields")) {
                     fields = (Map<String, Object>) reflectField.get(point);
@@ -71,7 +72,6 @@ public class IotDBInfluxDB {
                 if (reflectField.getType().getName().equalsIgnoreCase("java.lang.Number") && reflectField.getName().equalsIgnoreCase("time")) {
                     time = (Long) reflectField.get(point);
                 }
-                System.out.println("1");
             } catch (IllegalAccessException e) {
                 e.printStackTrace();
             }
@@ -79,7 +79,10 @@ public class IotDBInfluxDB {
         if (time == null) {
             time = System.currentTimeMillis();
         }
-        Map<String, Integer> tagOrders = measurementTagOrder.get(database);
+        tagOrders = measurementTagOrder.get(database);
+        if (tagOrders == null) {
+            tagOrders = new HashMap<>();
+        }
         int measurementTagNum = tagOrders.size();
         Map<Integer, String> realTagOrders = new HashMap<>();
         for (Map.Entry<String, String> entry : tags.entrySet()) {
@@ -116,7 +119,7 @@ public class IotDBInfluxDB {
             } else if (value instanceof Double) {
                 types.add(TSDataType.DOUBLE);
             } else {
-                System.err.printf("get solve type:%s", entry.getValue().getClass());
+                System.err.printf("can't solve type:%s", entry.getValue().getClass());
             }
             values.add(value);
         }
@@ -150,25 +153,38 @@ public class IotDBInfluxDB {
 
     public QueryResult query() throws Exception {
         //sql
-        //String sql = "select * from cpu where (host = 'serverA' and regions='us') or (regions = 'us' and value=0.77)";
+        //String sql = "select * from student where (name= 'xie' and sex='m') or (sex= 'fm' and age=92)";
 
         //构造sql参数
-        String measurement = "cpu";
+        String measurement = "student";
         BinaryExpr binaryExpr = new BinaryExpr();
         binaryExpr.Op = Token.OR;
         binaryExpr.LHS = new ParenExpr(new BinaryExpr(
                 Token.AND,
-                new BinaryExpr(Token.EQ, new VarRef("host", DataType.Unknown), new StringLiteral("serverA")),
-                new BinaryExpr(Token.EQ, new VarRef("regions", DataType.Unknown), new StringLiteral("us"))
+                new BinaryExpr(Token.EQ, new VarRef("name", DataType.Unknown), new StringLiteral("xie")),
+                new BinaryExpr(Token.EQ, new VarRef("sex", DataType.Unknown), new StringLiteral("m"))
         ));
         binaryExpr.RHS = new ParenExpr(new BinaryExpr(
                 Token.AND,
-                new BinaryExpr(Token.EQ, new VarRef("regions", DataType.Unknown), new StringLiteral("us")),
-                new BinaryExpr(Token.EQ, new VarRef("value", DataType.Unknown), new NumberLiteral(0.77))
+                new BinaryExpr(Token.EQ, new VarRef("sex", DataType.Unknown), new StringLiteral("fm")),
+                new BinaryExpr(Token.EQ, new VarRef("age", DataType.Unknown), new IntegerLiteral(92))
         ));
+        changeMeasurement(measurement);
+        this.measurement = measurement;
 
         queryExpr(binaryExpr);
         return null;
+    }
+
+    //更改当前的measurement
+    private void changeMeasurement(String measurement) {
+        if (!measurement.equals(this.measurement)) {
+            this.measurement = measurement;
+            tagOrders = measurementTagOrder.get(database);
+            if (tagOrders == null) {
+                tagOrders = new HashMap<>();
+            }
+        }
     }
 
     //创建database
@@ -192,14 +208,13 @@ public class IotDBInfluxDB {
 
     //设置当前的database
     public void setDatabase(String database) {
-        this.storageGroup = "root." + database;
         this.database = database;
         try {
             var result = session.executeQueryStatement("select * from root.TAG_INFO where database_name=" + String.format("\"%s\"", database));
             Map<String, Integer> tagOrder = new HashMap<>();
             while (result.hasNext()) {
                 var fields = result.next().getFields();
-                tagOrder.put(fields.get(2).getStringValue(), (int) fields.get(3).getFloatV());
+                tagOrder.put(fields.get(2).getStringValue(), fields.get(3).getIntV());
             }
             measurementTagOrder.put(database, tagOrder);
         } catch (Exception e) {
@@ -210,7 +225,53 @@ public class IotDBInfluxDB {
 
 
     //通过条件获取查询结果
-    private static SessionDataSet queryByConditions(List<Condition> conditions) {
+    private SessionDataSet queryByConditions(List<Condition> conditions) throws IoTDBConnectionException, StatementExecutionException {
+        Map<Integer, Condition> realConditionOrders = new HashMap<>();
+        List<Condition> fieldConditions = new ArrayList<>();
+        int measurementTagNum = tagOrders.size();
+        int currentQueryMaxTagNum = 0;
+        for (Condition condition : conditions) {
+            //当前条件是处于tag中
+            if (tagOrders.containsKey(condition.getValue())) {
+                int curOrder = tagOrders.get(condition.getValue());
+                realConditionOrders.put(curOrder, condition);
+                //更新当前查询条件的最大tag顺序
+                currentQueryMaxTagNum = Math.max(currentQueryMaxTagNum, curOrder);
+            } else {
+                fieldConditions.add(condition);
+            }
+        }
+        StringBuilder curQueryPath = new StringBuilder("root." + database + "." + measurement);
+        for (int i = 1; i <= currentQueryMaxTagNum; i++) {
+            if (realConditionOrders.containsKey(i)) {
+                curQueryPath.append(".").append(IotDBInfluxDBUtils.removeQuotation(realConditionOrders.get(i).getLiteral()));
+            } else {
+                curQueryPath.append(".").append("*");
+            }
+        }
+        StringBuilder realIotDBCondition = new StringBuilder();
+        for (int i = 0; i < fieldConditions.size(); i++) {
+            Condition condition = fieldConditions.get(i);
+            if (i != 0) {
+                realIotDBCondition.append(" and ");
+            }
+            realIotDBCondition.append(condition.getValue()).append(" ")
+                    .append(condition.getToken().getOperate()).append(" ")
+                    .append(condition.getLiteral());
+        }
+        for (int i = currentQueryMaxTagNum; i <= measurementTagNum; i++) {
+            if (i != currentQueryMaxTagNum) {
+                curQueryPath.append(".*");
+            }
+            String realQuerySql;
+            if (realIotDBCondition.toString().equals("")) {
+                realQuerySql = ("select * from " + curQueryPath);
+            } else {
+                realQuerySql = ("select * from " + curQueryPath + " where " + realIotDBCondition);
+            }
+            SessionDataSet sessionDataSet = session.executeQueryStatement(realQuerySql);
+            System.out.println(sessionDataSet.toString());
+        }
         return null;
     }
 
@@ -251,10 +312,11 @@ public class IotDBInfluxDB {
         Point.Builder builder = Point.measurement("student");
         Map<String, String> tags = new HashMap<String, String>();
         Map<String, Object> fields = new HashMap<String, Object>();
-        tags.put("name", "xie");
-        tags.put("sex", "m");
+        tags.put("name", "qi");
+        tags.put("address", "anhui");
+        tags.put("sex", "fm");
         fields.put("score", "97");
-        fields.put("age", 22);
+        fields.put("age", 92);
         fields.put("num", 3.1);
         builder.tag(tags);
         builder.fields(fields);
