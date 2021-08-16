@@ -243,7 +243,7 @@ iotdb的写入数据为
 Too many paths in one query! Currently allowed max deduplicated path number is 715, this query contains 1000 deduplicated path. Please use slimit to choose what you real want or adjust max_deduplicated_path_num in iotdb-engine.properties.
 ```
 
-综上所述，建议采取tag和field均当作timeseries的存储方法。
+综上所述，建议采取第二种方案（把tag放在path中存储）。
 
 ## 6.参考资料
 
