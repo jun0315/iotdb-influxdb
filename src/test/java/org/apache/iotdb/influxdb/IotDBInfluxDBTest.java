@@ -6,14 +6,15 @@ import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.session.Session;
 import org.apache.iotdb.session.SessionDataSet;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
+import org.influxdb.InfluxDB;
+import org.influxdb.InfluxDBFactory;
+import org.influxdb.dto.Query;
+import org.influxdb.dto.QueryResult;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Time;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class IotDBInfluxDBTest {
     private IotDBInfluxDB iotDBInfluxDB;
@@ -130,5 +131,24 @@ public class IotDBInfluxDBTest {
         System.out.println(index);
 
         dataSet.closeOperationHandle();
+    }
+
+    @Test
+    public void testInfluxDB() {
+        String a = null;
+        if (a == null) {
+            System.out.println("1");
+        }
+        InfluxDB influxDB = InfluxDBFactory.connect("http://localhost:8086", "root", "root");
+        influxDB.setDatabase("testdata");
+        QueryResult queryResult = influxDB.query(new Query("select * from cpu", "testdata"));
+        QueryResult t = new QueryResult();
+        ArrayList<Integer> tt = new ArrayList<>();
+        List list = Arrays.asList(1, 1, null, 3);
+        tt.addAll(list);
+
+//        QueryResult.Result r = new QueryResult.Result();
+//        t.setResults();
+        System.out.println(queryResult.toString());
     }
 }

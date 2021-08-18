@@ -1,5 +1,6 @@
 package org.apache.iotdb.infludb;
 
+import kotlin.text.StringsKt;
 import org.apache.iotdb.infludb.influxql.Condition;
 import org.apache.iotdb.infludb.influxql.Token;
 import org.apache.iotdb.infludb.influxql.expr.BinaryExpr;
@@ -7,6 +8,7 @@ import org.apache.iotdb.infludb.influxql.expr.Expr;
 import org.apache.iotdb.infludb.influxql.expr.ParenExpr;
 import org.apache.iotdb.infludb.influxql.expr.VarRef;
 import org.apache.iotdb.session.SessionDataSet;
+import org.influxdb.dto.QueryResult;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,13 +32,13 @@ public final class IotDBInfluxDBUtils {
     }
 
     //取并集
-    public static SessionDataSet orProcess(SessionDataSet dataSet1, SessionDataSet dataSet2) {
-        return dataSet1;
+    public static QueryResult orProcess(QueryResult queryResult1, QueryResult queryResult2) {
+        return queryResult2;
     }
 
     //取交集
-    public static SessionDataSet andProcess(SessionDataSet dataSet1, SessionDataSet dataSet2) {
-        return dataSet1;
+    public static QueryResult andProcess(QueryResult queryResult1, QueryResult queryResult2) {
+        return queryResult1;
     }
 
     //判断该expr是否有or的操作,是否可以合并查询
@@ -91,4 +93,9 @@ public final class IotDBInfluxDBUtils {
         return condition;
     }
 
+    //截取最后一个点
+    public static String getFiledByPath(String path) {
+        String[] tmpList = path.split("\\.");
+        return tmpList[tmpList.length - 1];
+    }
 }
