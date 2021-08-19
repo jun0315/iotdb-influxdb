@@ -6,18 +6,16 @@ import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.session.Session;
 import org.apache.iotdb.session.SessionDataSet;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
-import org.influxdb.InfluxDB;
+import org.apache.iotdb.tsfile.read.common.RowRecord;
 import org.influxdb.dto.*;
 import org.apache.iotdb.infludb.influxql.*;
 
 import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class IotDBInfluxDB {
 
@@ -34,6 +32,8 @@ public class IotDBInfluxDB {
 
     //当前measurement下的field列表及指定规则的顺序
     private Map<String, Integer> fieldOrders;
+    //反转map
+    private Map<Integer, String> fieldOrdersReversed;
 
     //占位符
     private final String placeholder = "PH";
@@ -152,7 +152,7 @@ public class IotDBInfluxDB {
         values.add(measurement);
         values.add(tag);
         values.add(order);
-        session.insertRecord("root.TAG_INFO_NEW", System.currentTimeMillis(), measurements, types, values);
+        session.insertRecord("root.TAG_INFO", System.currentTimeMillis(), measurements, types, values);
     }
 
     //查询函数
@@ -170,8 +170,8 @@ public class IotDBInfluxDB {
         binaryExpr.Op = Token.OR;
         binaryExpr.LHS = new ParenExpr(new BinaryExpr(
                 Token.AND,
-                new BinaryExpr(Token.EQ, new VarRef("name", DataType.Unknown), new StringLiteral("xie")),
-                new BinaryExpr(Token.EQ, new VarRef("sex", DataType.Unknown), new StringLiteral("m"))
+                new BinaryExpr(Token.EQ, new VarRef("name", DataType.Unknown), new StringLiteral("qi")),
+                new BinaryExpr(Token.EQ, new VarRef("sex", DataType.Unknown), new StringLiteral("fm"))
         ));
         binaryExpr.RHS = new ParenExpr(new BinaryExpr(
                 Token.AND,
@@ -189,6 +189,7 @@ public class IotDBInfluxDB {
     private void updateFiledOrders() throws IoTDBConnectionException, StatementExecutionException {
         //先初始化
         fieldOrders = new HashMap<>();
+        fieldOrdersReversed = new HashMap<>();
         String showTimeseriesSql = "show timeseries root." + database + '.' + measurement;
         SessionDataSet result = session.executeQueryStatement(showTimeseriesSql);
         int fieldNums = 0;
@@ -199,11 +200,10 @@ public class IotDBInfluxDB {
             if (!fieldOrders.containsKey(filed)) {
                 //field对应的顺序是1+tagNum （第一个是时间戳，接着是所有的tag，最后是所有的field）
                 fieldOrders.put(filed, tagOrderNums + fieldNums + 1);
+                fieldOrdersReversed.put(tagOrderNums + fieldNums + 1, filed);
                 fieldNums++;
             }
         }
-        System.out.println(result);
-
     }
 
     //更改当前的measurement
@@ -253,7 +253,7 @@ public class IotDBInfluxDB {
     private void updateDatabase(String database) {
         try {
             //TODO 为用户提供初始化sh，将root.TAG_INFO相关表结构创建出来 set storage group to root.TAG_INFO
-            var result = session.executeQueryStatement("select * from root.TAG_INFO_NEW where database_name=" + String.format("\"%s\"", database));
+            var result = session.executeQueryStatement("select * from root.TAG_INFO where database_name=" + String.format("\"%s\"", database));
             Map<String, Integer> tagOrder = new HashMap<>();
             String measurementName = null;
             while (result.hasNext()) {
@@ -341,15 +341,25 @@ public class IotDBInfluxDB {
                     curQueryPath.append(".*");
                 }
                 realQuerySql = ("select * from " + curQueryPath + " where " + realIotDBCondition);
-                SessionDataSet sessionDataSet = session.executeQueryStatement(realQuerySql);
+                SessionDataSet sessionDataSet = null;
+                try {
+                    sessionDataSet = session.executeQueryStatement(realQuerySql);
+                } catch (StatementExecutionException e) {
+                    if (e.getStatusCode() == 411) {
+                        //where的timeseries没有匹配的，会抛出411的错误，将其拦截打印
+                        System.out.println(e.getMessage());
+                    } else {
+                        throw e;
+                    }
+                }
                 //暂时的转换结果
                 QueryResult tmpQueryResult = iotdbResultCvtToInfluxdbResult(sessionDataSet);
                 //如果是第一次，则直接赋值，不需要or操作
                 if (i == currentQueryMaxTagNum) {
                     lastQueryResult = tmpQueryResult;
                 } else {
-                    //进行or操作
-                    lastQueryResult = IotDBInfluxDBUtils.orProcess(lastQueryResult, tmpQueryResult);
+                    //进行add操作
+                    lastQueryResult = IotDBInfluxDBUtils.addQueryResultProcess(lastQueryResult, tmpQueryResult);
                 }
             }
             queryResult = lastQueryResult;
@@ -358,15 +368,95 @@ public class IotDBInfluxDB {
     }
 
     //将iotdb的查询结果转换为influxdb的查询结果
-    private QueryResult iotdbResultCvtToInfluxdbResult(SessionDataSet sessionDataSet) {
-        return null;
+    private QueryResult iotdbResultCvtToInfluxdbResult(SessionDataSet sessionDataSet) throws IoTDBConnectionException, StatementExecutionException {
+        if (sessionDataSet == null) {
+            //TODO return null QueryResult;
+            return null;
+        }
+        List<String> iotdbResultColumn = sessionDataSet.getColumnNames();
+        ArrayList<Integer> samePath = IotDBInfluxDBUtils.getSamePathForList(iotdbResultColumn.subList(1, iotdbResultColumn.size()));
+        //生成series
+        QueryResult.Series series = new QueryResult.Series();
+        series.setName(measurement);
+        //获取tag的反向map
+        Map<Integer, String> tagOrderReversed = tagOrders.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+        int tagSize = tagOrderReversed.size();
+        ArrayList<String> tagList = new ArrayList<>();
+        for (int i = 1; i <= tagSize; i++) {
+            tagList.add(tagOrderReversed.get(i));
+        }
+
+        ArrayList<String> fieldList = new ArrayList<>();
+        for (int i = 1 + tagSize; i <= 1 + tagSize + fieldOrders.size(); i++) {
+            fieldList.add(fieldOrdersReversed.get(i));
+        }
+        ArrayList<String> columns = new ArrayList<>();
+        columns.add("time");
+        columns.addAll(tagList);
+        columns.addAll(fieldList);
+        //把columns插入series中
+        series.setColumns(columns);
+
+        List<List<Object>> values = new ArrayList<>();
+        while (sessionDataSet.hasNext()) {
+            Object[] value = new Object[columns.size()];
+
+            RowRecord record = sessionDataSet.next();
+            List<org.apache.iotdb.tsfile.read.common.Field> fields = record.getFields();
+            long timestamp = record.getTimestamp();
+            //判断该path是否所有的值都为null
+            boolean allNull = true;
+            //记录sameList的当前下标
+            int sameListIndex = 0;
+            for (int i = 0; i < fields.size(); i++) {
+                Object o = IotDBInfluxDBUtils.iotdbFiledCvt(fields.get(i));
+                if (o != null) {
+                    if (allNull) {
+                        allNull = false;
+                    }
+                    //将filed的值插入其中
+                    value[fieldOrders.get(IotDBInfluxDBUtils.getFiledByPath(iotdbResultColumn.get(i + 1)))] = o;
+                }
+                //该相同的path已经遍历完成
+                if (i == samePath.get(sameListIndex)) {
+                    //如果数据中有非null，则插入实际的数据中，否则直接跳过
+                    if (!allNull) {
+                        //先把时间插入value中
+                        value[0] = timestamp;
+                        //再把该path中的tag插入value中国
+                        //加1，第零列是time
+                        String tmpPathName = iotdbResultColumn.get(i + 1);
+                        String[] tmpTags = tmpPathName.split("\\.");
+                        for (int j = 3; i < tmpTags.length - 1; i++) {
+                            if (!tmpTags[j].equals(placeholder)) {
+                                //放入指定的序列中
+                                value[j - 2] = tmpTags[j];
+                            }
+                        }
+                    }
+                    //插入实际的value
+                    values.add(Arrays.asList(value));
+                    //重制value
+                    value = new Object[columns.size()];
+                }
+            }
+        }
+        series.setValues(values);
+
+        QueryResult queryResult = new QueryResult();
+        QueryResult.Result result = new QueryResult.Result();
+        result.setSeries(List.of(series));
+        queryResult.setResults(List.of(result));
+
+        return queryResult;
     }
 
 
     public QueryResult queryExpr(Expr expr) throws Exception {
         if (expr instanceof BinaryExpr binaryExpr) {
             if (binaryExpr.Op == Token.OR) {
-                return IotDBInfluxDBUtils.orProcess(queryExpr(binaryExpr.LHS), queryExpr(binaryExpr.RHS));
+                return IotDBInfluxDBUtils.orQueryResultProcess(queryExpr(binaryExpr.LHS), queryExpr(binaryExpr.RHS));
             } else if (binaryExpr.Op == Token.AND) {
                 if (IotDBInfluxDBUtils.canMergeExpr(binaryExpr.LHS) && IotDBInfluxDBUtils.canMergeExpr(binaryExpr.RHS)) {
                     List<Condition> conditions1 = IotDBInfluxDBUtils.getConditionsByExpr(binaryExpr.LHS);
@@ -376,7 +466,7 @@ public class IotDBInfluxDB {
                     conditions1.addAll(conditions2);
                     return queryByConditions(conditions1);
                 } else {
-                    return IotDBInfluxDBUtils.andProcess(queryExpr(binaryExpr.LHS), queryExpr(binaryExpr.RHS));
+                    return IotDBInfluxDBUtils.andQueryResultProcess(queryExpr(binaryExpr.LHS), queryExpr(binaryExpr.RHS));
                 }
             } else {
                 List<Condition> conditions = new ArrayList<>();
@@ -399,14 +489,13 @@ public class IotDBInfluxDB {
         iotDBInfluxDB.setDatabase("database");
         //构造influxdb的插入build参数
         Point.Builder builder = Point.measurement("student");
-        Map<String, String> tags = new HashMap<String, String>();
-        Map<String, Object> fields = new HashMap<String, Object>();
-        tags.put("name", "qi");
-        tags.put("address", "anhui");
-        tags.put("sex", "fm");
-        fields.put("score", "97");
-        fields.put("age", 92);
-        fields.put("num", 3.1);
+        Map<String, String> tags = new HashMap<>();
+        Map<String, Object> fields = new HashMap<>();
+        tags.put("name", "xie");
+        tags.put("stress", "huai");
+        tags.put("sex", "m");
+        fields.put("score", "87");
+        fields.put("tel", 110);
         builder.tag(tags);
         builder.fields(fields);
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);

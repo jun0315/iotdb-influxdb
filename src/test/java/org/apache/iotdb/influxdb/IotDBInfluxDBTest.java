@@ -151,4 +151,20 @@ public class IotDBInfluxDBTest {
 //        t.setResults();
         System.out.println(queryResult.toString());
     }
+
+    @Test
+    public void testIotDB() throws IoTDBConnectionException, StatementExecutionException {
+
+        List<List<Object>> values = new ArrayList<>();
+        Object[] value = new Object[11];
+        value[1] = 1;
+        values.add(Arrays.asList(value));
+        System.out.println(values);
+        var r = session.executeQueryStatement("select * from root.database.student");
+        while (r.hasNext()) {
+            var fields = r.next().getFields();
+            System.out.println(fields);
+        }
+
+    }
 }
