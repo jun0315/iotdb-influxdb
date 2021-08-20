@@ -38,7 +38,13 @@ public class IotDBInfluxDB {
     //占位符
     private final String placeholder = "PH";
 
-    //构造函数
+    /**
+     * 构造函数
+     *
+     * @param url      包括host和port
+     * @param userName 用户名
+     * @param password 用户密码
+     */
     public IotDBInfluxDB(String url, String userName, String password) {
         try {
             URI uri = new URI(url);
@@ -48,7 +54,14 @@ public class IotDBInfluxDB {
         }
     }
 
-    //构造函数
+    /**
+     * 构造函数
+     *
+     * @param host     域名
+     * @param rpcPort  端口号
+     * @param userName 用户名
+     * @param password 用户密码
+     */
     public IotDBInfluxDB(String host, int rpcPort, String userName, String password) throws IoTDBConnectionException {
         session = new Session(host, rpcPort, userName, password);
         session.open(false);
@@ -56,7 +69,12 @@ public class IotDBInfluxDB {
         session.setFetchSize(10000);
     }
 
-    //写入函数
+
+    /**
+     * 兼容influxdb的插入函数
+     *
+     * @param point 写入的point点
+     */
     public void write(Point point) throws IoTDBConnectionException, StatementExecutionException {
         String measurement = null;
         Map<String, String> tags = new HashMap<>();
@@ -99,7 +117,7 @@ public class IotDBInfluxDB {
                 realTagOrders.put(tagOrders.get(entry.getKey()), entry.getKey());
             } else {
                 measurementTagNum++;
-                updateNewTag(measurement, entry.getKey(), measurementTagNum);
+                updateNewTagIntoDB(measurement, entry.getKey(), measurementTagNum);
                 realTagOrders.put(measurementTagNum, entry.getKey());
                 tagOrders.put(entry.getKey(), measurementTagNum);
             }
@@ -136,7 +154,15 @@ public class IotDBInfluxDB {
     }
 
     //插入时出现新的tag，把新的tag更新到内存和数据库中
-    public void updateNewTag(String measurement, String tag, int order) throws IoTDBConnectionException, StatementExecutionException {
+
+    /**
+     * 当有新的tag出现时，插入到数据库中
+     *
+     * @param measurement 插入的measurement
+     * @param tag         对应的tag名称
+     * @param order       对应的tag顺序
+     */
+    private void updateNewTagIntoDB(String measurement, String tag, int order) throws IoTDBConnectionException, StatementExecutionException {
         List<String> measurements = new ArrayList<>();
         List<TSDataType> types = new ArrayList<>();
         List<Object> values = new ArrayList<>();
@@ -155,11 +181,21 @@ public class IotDBInfluxDB {
         session.insertRecord("root.TAG_INFO", System.currentTimeMillis(), measurements, types, values);
     }
 
-    //查询函数
+    /**
+     * 兼容influxdb的查询函数(由于目前influxql的语法解析器暂未完成,暂时未实现)
+     *
+     * @param query influxdb的查询参数，包括databaseName和sql语句
+     * @return 返回Influxdb的查询结果
+     */
     public QueryResult query(Query query) {
         return null;
     }
 
+    /**
+     * 传入一个解析好的语法树，进行兼容influxdb的查询函数
+     *
+     * @return 返回influxdb的查询结果
+     */
     public QueryResult query() throws Exception {
         //sql
         //String sql = "select * from student where (name= 'xie' and sex='m') or (sex= 'fm' and age=92)";
@@ -178,14 +214,15 @@ public class IotDBInfluxDB {
                 new BinaryExpr(Token.EQ, new VarRef("province", DataType.Unknown), new StringLiteral("anhui")),
                 new BinaryExpr(Token.EQ, new VarRef("country", DataType.Unknown), new StringLiteral("china"))
         ));
-        changeMeasurement(measurement);
+        updateMeasurement(measurement);
         updateFiledOrders();
 
-        QueryResult queryResult = queryExpr(binaryExpr);
-        return queryResult;
+        return queryExpr(binaryExpr);
     }
 
-    //更新当前measure的所有的field列表及指定顺序
+    /**
+     * 每次查询前，先获取该measurement中所有的field列表,更新当前measure的所有的field列表及指定顺序
+     */
     private void updateFiledOrders() throws IoTDBConnectionException, StatementExecutionException {
         //先初始化
         fieldOrders = new HashMap<>();
@@ -206,8 +243,12 @@ public class IotDBInfluxDB {
         }
     }
 
-    //更改当前的measurement
-    private void changeMeasurement(String measurement) {
+    /**
+     * 更新当前的measurement
+     *
+     * @param measurement 需要更改的measurement
+     */
+    private void updateMeasurement(String measurement) {
         if (!measurement.equals(this.measurement)) {
             this.measurement = measurement;
             tagOrders = measurementTagOrder.get(measurement);
@@ -217,9 +258,13 @@ public class IotDBInfluxDB {
         }
     }
 
-    //创建database
+    /**
+     * 创建database，写入iotdb中
+     *
+     * @param name database的name
+     */
     public void createDatabase(String name) {
-        IotDBInfluxDBUtils.checkNonEmptyString(name, "name");
+        IotDBInfluxDBUtils.checkNonEmptyString(name, "database name");
         try {
             session.setStorageGroup("root." + name);
         } catch (IoTDBConnectionException | StatementExecutionException e) {
@@ -232,7 +277,11 @@ public class IotDBInfluxDB {
         }
     }
 
-    //删除database
+    /**
+     * 删除database
+     *
+     * @param name database的name
+     */
     public void deleteDatabase(String name) {
         try {
             session.deleteStorageGroup("root." + name);
@@ -241,7 +290,11 @@ public class IotDBInfluxDB {
         }
     }
 
-    //设置当前的database
+    /**
+     * 设置database，同时获取database对应的所有tag列表及顺序
+     *
+     * @param database 需要设置的database的name
+     */
     public void setDatabase(String database) {
         if (!database.equals(this.database)) {
             updateDatabase(database);
@@ -249,7 +302,12 @@ public class IotDBInfluxDB {
         }
     }
 
-    //当database发生改变时，更新database相关信息
+
+    /**
+     * 当database发生改变时，更新database相关信息，即从iotdb中获取database对应的所有tag列表及顺序
+     *
+     * @param database 需要更新的database的name
+     */
     private void updateDatabase(String database) {
         try {
             var result = session.executeQueryStatement("select * from root.TAG_INFO where database_name=" + String.format("\"%s\"", database));
@@ -284,7 +342,14 @@ public class IotDBInfluxDB {
     }
 
 
-    //通过条件获取查询结果
+    //
+
+    /**
+     * 通过条件获取查询Influxdb格式的查询结果
+     *
+     * @param conditions 限制条件列表，包括tag和field条件限制
+     * @return 返回Influxdb查询结果
+     */
     private QueryResult queryByConditions(List<Condition> conditions) throws IoTDBConnectionException, StatementExecutionException {
         //用来存储符合tag的实际顺序
         Map<Integer, Condition> realTagOrders = new HashMap<>();
@@ -371,7 +436,13 @@ public class IotDBInfluxDB {
         return queryResult;
     }
 
-    //将iotdb的查询结果转换为influxdb的查询结果
+
+    /**
+     * 将iotdb的查询结果转换为influxdb的查询结果
+     *
+     * @param sessionDataSet 待转换的iotdb查询结果
+     * @return influxdb格式的查询结果
+     */
     private QueryResult iotdbResultCvtToInfluxdbResult(SessionDataSet sessionDataSet) throws IoTDBConnectionException, StatementExecutionException {
         if (sessionDataSet == null) {
             return IotDBInfluxDBUtils.getNullQueryResult();
@@ -457,6 +528,12 @@ public class IotDBInfluxDB {
     }
 
 
+    /**
+     * 通过Influxdb的语法树获取查询结果
+     *
+     * @param expr 需要处理的查询语法树
+     * @return influxdb格式的查询结果
+     */
     public QueryResult queryExpr(Expr expr) throws Exception {
         if (expr instanceof BinaryExpr binaryExpr) {
             if (binaryExpr.Op == Token.OR) {
@@ -504,7 +581,7 @@ public class IotDBInfluxDB {
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         Point point = builder.build();
         //build构造完成，开始write
-//        iotDBInfluxDB.write(point);
+        iotDBInfluxDB.write(point);
 
         builder = Point.measurement("student");
         tags = new HashMap<>();
@@ -518,7 +595,8 @@ public class IotDBInfluxDB {
         builder.fields(fields);
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         point = builder.build();
-//        iotDBInfluxDB.write(point);
+        //插入两条数据，便于验证复杂查询
+        iotDBInfluxDB.write(point);
 
         //开始查询
         QueryResult result = iotDBInfluxDB.query();

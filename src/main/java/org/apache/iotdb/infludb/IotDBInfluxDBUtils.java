@@ -16,16 +16,14 @@ import java.util.Arrays;
 import java.util.List;
 
 public final class IotDBInfluxDBUtils {
-    //检查当前字段是否为空
-    public static String checkNonEmptyString(String string, String name) throws IllegalArgumentException {
-        if (string != null && !string.isEmpty()) {
-            return string;
-        } else {
-            throw new IllegalArgumentException("Expecting a non-empty string for " + name);
-        }
-    }
 
-    //如果当前字符串的第一个和最后一个是引号，则将其去除
+
+    /**
+     * 如果当前字符串的第一个和最后一个是引号，则将其去除
+     *
+     * @param str 需要处理的字符串
+     * @return 处理之后的字符串
+     */
     public static String removeQuotation(String str) {
         if (str.charAt(0) == '"' && str.charAt(str.length() - 1) == '"') {
             return str.substring(1, str.length() - 1);
@@ -33,7 +31,14 @@ public final class IotDBInfluxDBUtils {
         return str;
     }
 
-    //取交集
+
+    /**
+     * 将两个influxdb的查询结果取交集
+     *
+     * @param queryResult1 第一个查询结果
+     * @param queryResult2 第二个查询结果
+     * @return 两个查询结果取交集
+     */
     public static QueryResult andQueryResultProcess(QueryResult queryResult1, QueryResult queryResult2) {
         if (checkQueryResultNull(queryResult1) || checkQueryResultNull(queryResult2)) {
             return getNullQueryResult();
@@ -65,7 +70,14 @@ public final class IotDBInfluxDBUtils {
         return queryResult1;
     }
 
-    //取并集
+
+    /**
+     * 将两个influxdb的查询结果取并集
+     *
+     * @param queryResult1 第一个查询结果
+     * @param queryResult2 第二个查询结果
+     * @return 两个查询结果取并集
+     */
     public static QueryResult orQueryResultProcess(QueryResult queryResult1, QueryResult queryResult2) {
         if (checkQueryResultNull(queryResult1)) {
             return queryResult2;
@@ -105,7 +117,14 @@ public final class IotDBInfluxDBUtils {
         return queryResult1;
     }
 
-    //二者求加
+
+    /**
+     * 将两个influxdb的查询结果取和（即默认二者不会有重复的数据，直接加在一起）
+     *
+     * @param queryResult1 第一个查询结果
+     * @param queryResult2 第二个查询结果
+     * @return 两个查询结果取和
+     */
     public static QueryResult addQueryResultProcess(QueryResult queryResult1, QueryResult queryResult2) {
         if (checkQueryResultNull(queryResult1)) {
             return queryResult2;
@@ -124,6 +143,12 @@ public final class IotDBInfluxDBUtils {
         return queryResult1;
     }
 
+    /**
+     * 将新的values更新到influxdb的查询结果中
+     *
+     * @param queryResult  待更新的influxdb查询结果
+     * @param updateValues 待更新的values
+     */
     private static void updateQueryResultValue(QueryResult queryResult, List<List<Object>> updateValues) {
         List<QueryResult.Result> results = queryResult.getResults();
         QueryResult.Result result = results.get(0);
@@ -136,6 +161,13 @@ public final class IotDBInfluxDBUtils {
         results.set(0, result);
     }
 
+    /**
+     * 检查两个influxdb的查询结果是否属于同一个查询，即measurement和columns是否一致
+     *
+     * @param queryResult1 待检查结果1
+     * @param queryResult2 待检查结果2
+     * @return 是否属于同一个查询
+     */
     private static boolean checkSameQueryResult(QueryResult queryResult1, QueryResult queryResult2) {
         return queryResult1.getResults().get(0).getSeries().get(0).getName().
                 equals(queryResult2.getResults().get(0).getSeries().get(0).getName()) &&
@@ -143,6 +175,13 @@ public final class IotDBInfluxDBUtils {
                         queryResult2.getResults().get(0).getSeries().get(0).getColumns());
     }
 
+    /**
+     * 判断两个字符串列表是否相同
+     *
+     * @param list1 需要比对的第一个列表
+     * @param list2 需要比对的第二个列表
+     * @return 是否相同
+     */
     private static boolean checkSameStringList(List<String> list1, List<String> list2) {
         if (list1.size() != list2.size()) {
             return false;
@@ -156,7 +195,13 @@ public final class IotDBInfluxDBUtils {
         return true;
     }
 
-    //判断该expr是否有or的操作,是否可以合并查询
+
+    /**
+     * 判断该语法树的子树是否有or操作，如果没有均为and操作的话，则可以合并查询
+     *
+     * @param expr 需要判断的子树
+     * @return 是否可以合并查询
+     */
     public static boolean canMergeExpr(Expr expr) {
         if (expr instanceof BinaryExpr binaryExpr) {
             if (binaryExpr.Op == Token.OR) {
@@ -173,7 +218,12 @@ public final class IotDBInfluxDBUtils {
         }
     }
 
-    //如果进入这个函数，说明一定是可以合并的语法树，不存在or的情况
+    /**
+     * 通过语法树来生成查询条件（如果进入这个函数，说明一定是可以合并的语法树，不存在or的情况）
+     *
+     * @param expr 需要生成查询条件的语法树
+     * @return 条件列表
+     */
     public static List<Condition> getConditionsByExpr(Expr expr) {
         if (expr instanceof ParenExpr parenExpr) {
             return getConditionsByExpr(parenExpr.Expr);
@@ -195,6 +245,12 @@ public final class IotDBInfluxDBUtils {
         return null;
     }
 
+    /**
+     * 通过唯一条件的子树来生成条件
+     *
+     * @param binaryExpr 需要生成条件的子树
+     * @return 对应的条件
+     */
     public static Condition getConditionForSingleExpr(BinaryExpr binaryExpr) {
         Condition condition = new Condition();
         condition.setToken(binaryExpr.Op);
@@ -208,12 +264,28 @@ public final class IotDBInfluxDBUtils {
         return condition;
     }
 
+    /**
+     * 通过iotdb中的path来获取最后一个节点
+     *
+     * @param path 需要处理的path
+     * @return 最后一个节点
+     */
     //截取最后一个点
     public static String getFiledByPath(String path) {
         String[] tmpList = path.split("\\.");
         return tmpList[tmpList.length - 1];
     }
 
+    /**
+     * 通过一个行列表来生成相同layerPath的列表
+     * example:
+     * input:{root.d.s.x.s.field1 , root.d.s.x.s.field2 , root.d.s.xx.ss.filed3 , root.d.s.xx.ss.filed1 , root.d.s.xxx.sss.field4}
+     * output:{1,3,4}
+     * 对应的是列表下标的1，3和4。也就是当前同一layerPath的最后一个下标。便于区分同一组数据
+     *
+     * @param columnNames 需要生成列表的行名称列表
+     * @return 相同layerPath中最后一个下标的集合
+     */
     public static ArrayList<Integer> getSamePathForList(List<String> columnNames) {
         ArrayList<Integer> list = new ArrayList<>();
         //记录上一个结果么，用来判断是否和当前重复
@@ -234,6 +306,12 @@ public final class IotDBInfluxDBUtils {
         return list;
     }
 
+    /**
+     * 将iotdb中field的值转换成object
+     *
+     * @param field 需要转换的filed
+     * @return field中存储的值
+     */
     public static Object iotdbFiledCvt(Field field) {
         if (field.getDataType() == null) {
             return null;
@@ -256,6 +334,11 @@ public final class IotDBInfluxDBUtils {
         }
     }
 
+    /**
+     * 获得一个空值的QueryResult
+     *
+     * @return 空值QueryResult
+     */
     public static QueryResult getNullQueryResult() {
         QueryResult queryResult = new QueryResult();
         QueryResult.Result result = new QueryResult.Result();
@@ -263,10 +346,23 @@ public final class IotDBInfluxDBUtils {
         return queryResult;
     }
 
+    /**
+     * 以指定的方式来检查QueryResult是否为null
+     *
+     * @param queryResult 待检查的QueryResult
+     * @return 是否为null
+     */
     public static boolean checkQueryResultNull(QueryResult queryResult) {
         return queryResult.getResults().get(0).getSeries() == null;
     }
 
+    /**
+     * 判断两个实例是否相等，允许null检查
+     *
+     * @param o1 实例1
+     * @param o2 实例2
+     * @return 是否相等
+     */
     public static boolean checkEqualsContainNull(Object o1, Object o2) {
         if (o1 == null && o2 == null) {
             return true;
@@ -276,6 +372,18 @@ public final class IotDBInfluxDBUtils {
             return false;
         } else {
             return o1.equals(o2);
+        }
+    }
+
+    /**
+     * 检查该字段是否为空,如果为空，则抛出错误
+     *
+     * @param string 需要检查的字段
+     * @param name   抛错中的提示信息
+     */
+    public static void checkNonEmptyString(String string, String name) throws IllegalArgumentException {
+        if (string == null || string.isEmpty()) {
+            throw new IllegalArgumentException("Expecting a non-empty string for " + name);
         }
     }
 }
