@@ -35,6 +35,9 @@ public final class IotDBInfluxDBUtils {
 
     //取交集
     public static QueryResult andQueryResultProcess(QueryResult queryResult1, QueryResult queryResult2) {
+        if (checkQueryResultNull(queryResult1) || checkQueryResultNull(queryResult2)) {
+            return getNullQueryResult();
+        }
         if (!checkSameQueryResult(queryResult1, queryResult2)) {
             System.out.println("QueryResult1 and QueryResult2 is not same attribute");
             return queryResult1;
@@ -47,7 +50,7 @@ public final class IotDBInfluxDBUtils {
                 boolean allEqual = true;
                 for (int t = 0; t < value1.size(); t++) {
                     //如果有不相等的话，那么跳过当前j
-                    if (!value1.get(t).equals(value2.get(t))) {
+                    if (!checkEqualsContainNull(value1.get(t), value2.get(t))) {
                         allEqual = false;
                         break;
                     }
@@ -62,9 +65,13 @@ public final class IotDBInfluxDBUtils {
         return queryResult1;
     }
 
-
     //取并集
     public static QueryResult orQueryResultProcess(QueryResult queryResult1, QueryResult queryResult2) {
+        if (checkQueryResultNull(queryResult1)) {
+            return queryResult2;
+        } else if (checkQueryResultNull(queryResult2)) {
+            return queryResult1;
+        }
         if (!checkSameQueryResult(queryResult1, queryResult2)) {
             System.out.println("QueryResult1 and QueryResult2 is not same attribute");
             return queryResult1;
@@ -78,7 +85,7 @@ public final class IotDBInfluxDBUtils {
                 boolean notEqual = false;
                 for (int t = 0; t < value1.size(); t++) {
                     //如果有不相等的话，那么跳过当前j
-                    if (!value1.get(t).equals(value2.get(t))) {
+                    if (!checkEqualsContainNull(value1.get(t), value2.get(t))) {
                         notEqual = true;
                         break;
                     }
@@ -93,13 +100,18 @@ public final class IotDBInfluxDBUtils {
             }
         }
         //values2加上 不相同的valueList
-        values2.add(List.of(notSameValuesInValues1));
+        values2.addAll(notSameValuesInValues1);
         updateQueryResultValue(queryResult1, values2);
         return queryResult1;
     }
 
-    //取并集
+    //二者求加
     public static QueryResult addQueryResultProcess(QueryResult queryResult1, QueryResult queryResult2) {
+        if (checkQueryResultNull(queryResult1)) {
+            return queryResult2;
+        } else if (checkQueryResultNull(queryResult2)) {
+            return queryResult1;
+        }
         if (!checkSameQueryResult(queryResult1, queryResult2)) {
             System.out.println("QueryResult1 and QueryResult2 is not same attribute");
             return queryResult1;
@@ -107,8 +119,8 @@ public final class IotDBInfluxDBUtils {
         List<List<Object>> values1 = queryResult1.getResults().get(0).getSeries().get(0).getValues();
         List<List<Object>> values2 = queryResult2.getResults().get(0).getSeries().get(0).getValues();
         //values相加
-        values1.add(List.of(values2));
-        updateQueryResultValue(queryResult1, values2);
+        values1.addAll(values2);
+        updateQueryResultValue(queryResult1, values1);
         return queryResult1;
     }
 
@@ -241,6 +253,29 @@ public final class IotDBInfluxDBUtils {
                 return field.getBoolV();
             default:
                 return null;
+        }
+    }
+
+    public static QueryResult getNullQueryResult() {
+        QueryResult queryResult = new QueryResult();
+        QueryResult.Result result = new QueryResult.Result();
+        queryResult.setResults(Arrays.asList(result));
+        return queryResult;
+    }
+
+    public static boolean checkQueryResultNull(QueryResult queryResult) {
+        return queryResult.getResults().get(0).getSeries() == null;
+    }
+
+    public static boolean checkEqualsContainNull(Object o1, Object o2) {
+        if (o1 == null && o2 == null) {
+            return true;
+        } else if (o1 == null) {
+            return false;
+        } else if (o2 == null) {
+            return false;
+        } else {
+            return o1.equals(o2);
         }
     }
 }

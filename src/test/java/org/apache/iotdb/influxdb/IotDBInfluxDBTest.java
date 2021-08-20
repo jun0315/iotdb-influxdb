@@ -141,7 +141,7 @@ public class IotDBInfluxDBTest {
         }
         InfluxDB influxDB = InfluxDBFactory.connect("http://localhost:8086", "root", "root");
         influxDB.setDatabase("testdata");
-        QueryResult queryResult = influxDB.query(new Query("select * from cpu", "testdata"));
+        QueryResult queryResult = influxDB.query(new Query("select * from cpu where sex =\"a\" ", "testdata"));
         QueryResult t = new QueryResult();
         ArrayList<Integer> tt = new ArrayList<>();
         List list = Arrays.asList(1, 1, null, 3);
@@ -155,12 +155,7 @@ public class IotDBInfluxDBTest {
     @Test
     public void testIotDB() throws IoTDBConnectionException, StatementExecutionException {
 
-        List<List<Object>> values = new ArrayList<>();
-        Object[] value = new Object[11];
-        value[1] = 1;
-        values.add(Arrays.asList(value));
-        System.out.println(values);
-        var r = session.executeQueryStatement("select * from root.database.student");
+        var r = session.executeQueryStatement("select * from root.database.student1");
         while (r.hasNext()) {
             var fields = r.next().getFields();
             System.out.println(fields);

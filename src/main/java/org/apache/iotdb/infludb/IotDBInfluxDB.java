@@ -170,19 +170,19 @@ public class IotDBInfluxDB {
         binaryExpr.Op = Token.OR;
         binaryExpr.LHS = new ParenExpr(new BinaryExpr(
                 Token.AND,
-                new BinaryExpr(Token.EQ, new VarRef("name", DataType.Unknown), new StringLiteral("qi")),
-                new BinaryExpr(Token.EQ, new VarRef("sex", DataType.Unknown), new StringLiteral("fm"))
+                new BinaryExpr(Token.EQ, new VarRef("name", DataType.Unknown), new StringLiteral("xie")),
+                new BinaryExpr(Token.EQ, new VarRef("tel", DataType.Unknown), new IntegerLiteral(110))
         ));
         binaryExpr.RHS = new ParenExpr(new BinaryExpr(
                 Token.AND,
-                new BinaryExpr(Token.EQ, new VarRef("sex", DataType.Unknown), new StringLiteral("fm")),
-                new BinaryExpr(Token.EQ, new VarRef("age", DataType.Unknown), new IntegerLiteral(92))
+                new BinaryExpr(Token.EQ, new VarRef("province", DataType.Unknown), new StringLiteral("anhui")),
+                new BinaryExpr(Token.EQ, new VarRef("country", DataType.Unknown), new StringLiteral("china"))
         ));
         changeMeasurement(measurement);
         updateFiledOrders();
 
-        queryExpr(binaryExpr);
-        return null;
+        QueryResult queryResult = queryExpr(binaryExpr);
+        return queryResult;
     }
 
     //更新当前measure的所有的field列表及指定顺序
@@ -252,7 +252,6 @@ public class IotDBInfluxDB {
     //当database发生改变时，更新database相关信息
     private void updateDatabase(String database) {
         try {
-            //TODO 为用户提供初始化sh，将root.TAG_INFO相关表结构创建出来 set storage group to root.TAG_INFO
             var result = session.executeQueryStatement("select * from root.TAG_INFO where database_name=" + String.format("\"%s\"", database));
             Map<String, Integer> tagOrder = new HashMap<>();
             String measurementName = null;
@@ -274,7 +273,12 @@ public class IotDBInfluxDB {
             }
             //最后一个measurement，将当前measurement的tags加入其中
             measurementTagOrder.put(measurementName, tagOrder);
-        } catch (Exception e) {
+        } catch (StatementExecutionException e) {
+            //首次执行时，TAG_INFO表没有创建，拦截错误，打印日志即可
+            if (e.getStatusCode() == 411) {
+                System.out.println(e.getMessage());
+            }
+        } catch (IoTDBConnectionException e) {
             e.printStackTrace();
         }
     }
@@ -346,7 +350,7 @@ public class IotDBInfluxDB {
                     sessionDataSet = session.executeQueryStatement(realQuerySql);
                 } catch (StatementExecutionException e) {
                     if (e.getStatusCode() == 411) {
-                        //where的timeseries没有匹配的，会抛出411的错误，将其拦截打印
+                        //where的timeseries没有匹配的话，会抛出411的错误，将其拦截打印
                         System.out.println(e.getMessage());
                     } else {
                         throw e;
@@ -370,11 +374,8 @@ public class IotDBInfluxDB {
     //将iotdb的查询结果转换为influxdb的查询结果
     private QueryResult iotdbResultCvtToInfluxdbResult(SessionDataSet sessionDataSet) throws IoTDBConnectionException, StatementExecutionException {
         if (sessionDataSet == null) {
-            //TODO return null QueryResult;
-            return null;
+            return IotDBInfluxDBUtils.getNullQueryResult();
         }
-        List<String> iotdbResultColumn = sessionDataSet.getColumnNames();
-        ArrayList<Integer> samePath = IotDBInfluxDBUtils.getSamePathForList(iotdbResultColumn.subList(1, iotdbResultColumn.size()));
         //生成series
         QueryResult.Series series = new QueryResult.Series();
         series.setName(measurement);
@@ -388,7 +389,7 @@ public class IotDBInfluxDB {
         }
 
         ArrayList<String> fieldList = new ArrayList<>();
-        for (int i = 1 + tagSize; i <= 1 + tagSize + fieldOrders.size(); i++) {
+        for (int i = 1 + tagSize; i < 1 + tagSize + fieldOrders.size(); i++) {
             fieldList.add(fieldOrdersReversed.get(i));
         }
         ArrayList<String> columns = new ArrayList<>();
@@ -399,6 +400,9 @@ public class IotDBInfluxDB {
         series.setColumns(columns);
 
         List<List<Object>> values = new ArrayList<>();
+
+        List<String> iotdbResultColumn = sessionDataSet.getColumnNames();
+        ArrayList<Integer> samePath = IotDBInfluxDBUtils.getSamePathForList(iotdbResultColumn.subList(1, iotdbResultColumn.size()));
         while (sessionDataSet.hasNext()) {
             Object[] value = new Object[columns.size()];
 
@@ -446,8 +450,8 @@ public class IotDBInfluxDB {
 
         QueryResult queryResult = new QueryResult();
         QueryResult.Result result = new QueryResult.Result();
-        result.setSeries(List.of(series));
-        queryResult.setResults(List.of(result));
+        result.setSeries(new ArrayList<>(Arrays.asList(series)));
+        queryResult.setResults(new ArrayList<>(Arrays.asList(result)));
 
         return queryResult;
     }
@@ -492,7 +496,6 @@ public class IotDBInfluxDB {
         Map<String, String> tags = new HashMap<>();
         Map<String, Object> fields = new HashMap<>();
         tags.put("name", "xie");
-        tags.put("stress", "huai");
         tags.put("sex", "m");
         fields.put("score", "87");
         fields.put("tel", 110);
@@ -503,7 +506,22 @@ public class IotDBInfluxDB {
         //build构造完成，开始write
 //        iotDBInfluxDB.write(point);
 
+        builder = Point.measurement("student");
+        tags = new HashMap<>();
+        fields = new HashMap<>();
+        tags.put("name", "qi");
+        tags.put("sex", "fm");
+        tags.put("province", "anhui");
+        fields.put("score", "99");
+        fields.put("country", "china");
+        builder.tag(tags);
+        builder.fields(fields);
+        builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+        point = builder.build();
+//        iotDBInfluxDB.write(point);
+
         //开始查询
-        var result = iotDBInfluxDB.query();
+        QueryResult result = iotDBInfluxDB.query();
+        System.out.println(result.toString());
     }
 }
