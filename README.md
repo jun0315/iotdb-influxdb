@@ -261,8 +261,8 @@ InfluxDB语法解析器生成的语法树如下图所示：
 ![image-20210810002026474](image/image-20210810001602511.png)
 此时我们由两种解决思路：
 
-1. 分别进行四次查询，host=serverA ；regions=us;regions=zh和value=0.77四次查询，然后分别按照树的token，即or或者and进行合并。
-2. 将and的子树进行合并，即查询host=serverA and regions=us ；regions=zh and value=0.77.只需要进行两次查询。也就是本文提到的查询优化算法。
+1. 分别进行四次查询，host=serverA ；regions=us;regions=us和value=0.77四次查询，然后分别按照树的token，即or或者and进行合并。
+2. 将and的子树进行合并，即查询host=serverA and regions=us ；regions=us and value=0.77.只需要进行两次查询。也就是本文提到的查询优化算法。
 
 当然，如果根节点是and，同时左右子树分别对应的两个操作也是and，那么最终会合并成**一次**查询。
 
