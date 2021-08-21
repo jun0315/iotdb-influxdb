@@ -123,7 +123,7 @@ public class IotDBInfluxDB {
             }
         }
         //更新内存中map
-        measurementTagOrder.put(database, tagOrders);
+        measurementTagOrder.put(measurement, tagOrders);
         StringBuilder path = new StringBuilder("root." + database + "." + measurement);
         for (int i = 1; i <= measurementTagNum; i++) {
             if (realTagOrders.containsKey(i)) {
