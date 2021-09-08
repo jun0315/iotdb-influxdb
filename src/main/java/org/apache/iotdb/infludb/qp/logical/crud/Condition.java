@@ -1,17 +1,18 @@
-package org.apache.iotdb.infludb.influxql;
+package org.apache.iotdb.infludb.qp.logical.crud;
 
-import org.apache.iotdb.infludb.influxql.expr.Literal;
+import org.apache.iotdb.infludb.qp.constant.FilterConstant;
 
 public class Condition {
+
     //当前查询过滤条件的var
     public String Value;
-    public Token Token;
+    public FilterConstant.FilterType FilterType;
     //当前查询过滤条件的实际值
     public String Literal;
 
-    public Condition(String value, Token token, String literal) {
+    public Condition(String value, FilterConstant.FilterType filterType, String literal) {
         Value = value;
-        Token = token;
+        FilterType = filterType;
         Literal = literal;
     }
 
@@ -22,8 +23,8 @@ public class Condition {
         Value = value;
     }
 
-    public void setToken(org.apache.iotdb.infludb.influxql.Token token) {
-        Token = token;
+    public void setFilterType(FilterConstant.FilterType filterType) {
+        FilterType = filterType;
     }
 
     public void setLiteral(String literal) {
@@ -34,8 +35,8 @@ public class Condition {
         return Value;
     }
 
-    public org.apache.iotdb.infludb.influxql.Token getToken() {
-        return Token;
+    public FilterConstant.FilterType getFilterType() {
+        return FilterType;
     }
 
     public String getLiteral() {

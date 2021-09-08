@@ -1,6 +1,12 @@
 package org.apache.iotdb.infludb;
 
-import org.apache.iotdb.infludb.influxql.expr.*;
+import org.apache.iotdb.infludb.qp.constant.FilterConstant;
+import org.apache.iotdb.infludb.qp.logical.Operator;
+import org.apache.iotdb.infludb.qp.logical.crud.BasicFunctionOperator;
+import org.apache.iotdb.infludb.qp.logical.crud.Condition;
+import org.apache.iotdb.infludb.qp.logical.crud.FilterOperator;
+import org.apache.iotdb.infludb.qp.logical.crud.QueryOperator;
+import org.apache.iotdb.infludb.qp.strategy.LogicalGenerator;
 import org.apache.iotdb.rpc.IoTDBConnectionException;
 import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.session.Session;
@@ -8,7 +14,6 @@ import org.apache.iotdb.session.SessionDataSet;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.apache.iotdb.tsfile.read.common.RowRecord;
 import org.influxdb.dto.*;
-import org.apache.iotdb.infludb.influxql.*;
 
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -182,43 +187,23 @@ public class IotDBInfluxDB {
     }
 
     /**
-     * 兼容influxdb的查询函数(由于目前influxql的语法解析器暂未完成,暂时未实现)
+     * 兼容influxdb的查询函数
      *
      * @param query influxdb的查询参数，包括databaseName和sql语句
      * @return 返回Influxdb的查询结果
      */
-    public QueryResult query(Query query) {
-        return null;
+    public QueryResult query(Query query) throws Exception {
+        String sql = query.getCommand();
+        String database = query.getDatabase();
+        Operator operator = LogicalGenerator.generate(sql);
+        if (operator instanceof QueryOperator) {
+            updateMeasurement(((QueryOperator) operator).getFromComponent().getNodeName().get(0));
+            updateFiledOrders();
+            return queryExpr(((QueryOperator) operator).getWhereComponent().getFilterOperator());
+        }
+        throw new IllegalArgumentException("not query sql");
     }
 
-    /**
-     * 传入一个解析好的语法树，进行兼容influxdb的查询函数
-     *
-     * @return 返回influxdb的查询结果
-     */
-    public QueryResult query() throws Exception {
-        //sql
-        //String sql = "select * from student where (name= 'xie' and sex='m') or (sex= 'fm' and age=92)";
-
-        //构造sql参数
-        String measurement = "student";
-        BinaryExpr binaryExpr = new BinaryExpr();
-        binaryExpr.Op = Token.OR;
-        binaryExpr.LHS = new ParenExpr(new BinaryExpr(
-                Token.AND,
-                new BinaryExpr(Token.EQ, new VarRef("name", DataType.Unknown), new StringLiteral("xie")),
-                new BinaryExpr(Token.EQ, new VarRef("tel", DataType.Unknown), new IntegerLiteral(110))
-        ));
-        binaryExpr.RHS = new ParenExpr(new BinaryExpr(
-                Token.AND,
-                new BinaryExpr(Token.EQ, new VarRef("province", DataType.Unknown), new StringLiteral("anhui")),
-                new BinaryExpr(Token.EQ, new VarRef("country", DataType.Unknown), new StringLiteral("china"))
-        ));
-        updateMeasurement(measurement);
-        updateFiledOrders();
-
-        return queryExpr(binaryExpr);
-    }
 
     /**
      * 每次查询前，先获取该measurement中所有的field列表,更新当前measure的所有的field列表及指定顺序
@@ -390,7 +375,7 @@ public class IotDBInfluxDB {
                 realIotDBCondition.append(" and ");
             }
             realIotDBCondition.append(condition.getValue()).append(" ")
-                    .append(condition.getToken().getOperate()).append(" ")
+                    .append(FilterConstant.filterSymbol.get(condition.getFilterType())).append(" ")
                     .append(condition.getLiteral());
         }
         //实际的查询sql语句
@@ -527,38 +512,34 @@ public class IotDBInfluxDB {
         return queryResult;
     }
 
-
     /**
      * 通过Influxdb的语法树获取查询结果
      *
-     * @param expr 需要处理的查询语法树
+     * @param operator 需要处理的查询语法树
      * @return influxdb格式的查询结果
      */
-    public QueryResult queryExpr(Expr expr) throws Exception {
-        if (expr instanceof BinaryExpr binaryExpr) {
-            if (binaryExpr.Op == Token.OR) {
-                return IotDBInfluxDBUtils.orQueryResultProcess(queryExpr(binaryExpr.LHS), queryExpr(binaryExpr.RHS));
-            } else if (binaryExpr.Op == Token.AND) {
-                if (IotDBInfluxDBUtils.canMergeExpr(binaryExpr.LHS) && IotDBInfluxDBUtils.canMergeExpr(binaryExpr.RHS)) {
-                    List<Condition> conditions1 = IotDBInfluxDBUtils.getConditionsByExpr(binaryExpr.LHS);
-                    List<Condition> conditions2 = IotDBInfluxDBUtils.getConditionsByExpr(binaryExpr.RHS);
-                    assert conditions1 != null;
-                    assert conditions2 != null;
+    public QueryResult queryExpr(FilterOperator operator) throws Exception {
+        if (operator instanceof BasicFunctionOperator) {
+            List<Condition> conditions = new ArrayList<>();
+            conditions.add(IotDBInfluxDBUtils.getConditionForBasicFunctionOperator((BasicFunctionOperator) operator));
+            return queryByConditions(conditions);
+        } else {
+            FilterOperator leftOperator = operator.getChildOperators().get(0);
+            FilterOperator rightOperator = operator.getChildOperators().get(1);
+            if (operator.getFilterType() == FilterConstant.FilterType.KW_OR) {
+                return IotDBInfluxDBUtils.orQueryResultProcess(queryExpr(leftOperator), queryExpr(rightOperator));
+            } else if (operator.getFilterType() == FilterConstant.FilterType.KW_AND) {
+                if (IotDBInfluxDBUtils.canMergeOperator(leftOperator) && IotDBInfluxDBUtils.canMergeOperator(rightOperator)) {
+                    List<Condition> conditions1 = IotDBInfluxDBUtils.getConditionsByFilterOperatorOperator(leftOperator);
+                    List<Condition> conditions2 = IotDBInfluxDBUtils.getConditionsByFilterOperatorOperator(rightOperator);
                     conditions1.addAll(conditions2);
                     return queryByConditions(conditions1);
                 } else {
-                    return IotDBInfluxDBUtils.andQueryResultProcess(queryExpr(binaryExpr.LHS), queryExpr(binaryExpr.RHS));
+                    return IotDBInfluxDBUtils.andQueryResultProcess(queryExpr(leftOperator), queryExpr(rightOperator));
                 }
-            } else {
-                List<Condition> conditions = new ArrayList<>();
-                conditions.add(IotDBInfluxDBUtils.getConditionForSingleExpr(binaryExpr));
-                return queryByConditions(conditions);
             }
-        } else if (expr instanceof ParenExpr parenExpr) {
-            return queryExpr(parenExpr.Expr);
-        } else {
-            throw new Exception("don't allow type:" + expr.toString());
         }
+        throw new IllegalArgumentException("unknown operator " + operator.toString());
     }
 
     public static void main(String[] args) throws Exception {
@@ -586,7 +567,7 @@ public class IotDBInfluxDB {
         builder = Point.measurement("student");
         tags = new HashMap<>();
         fields = new HashMap<>();
-        tags.put("name", "qi");
+        tags.put("name", "xie");
         tags.put("sex", "fm");
         tags.put("province", "anhui");
         fields.put("score", "99");
@@ -599,7 +580,8 @@ public class IotDBInfluxDB {
         iotDBInfluxDB.write(point);
 
         //开始查询
-        QueryResult result = iotDBInfluxDB.query();
+        Query query = new Query("select * from student where (name=\"xie\" and sex=\"fm\")or score<99", "database");
+        QueryResult result = iotDBInfluxDB.query(query);
         System.out.println(result.toString());
     }
 }

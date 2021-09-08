@@ -1,13 +1,9 @@
 package org.apache.iotdb.infludb;
 
-import kotlin.text.StringsKt;
-import org.apache.iotdb.infludb.influxql.Condition;
-import org.apache.iotdb.infludb.influxql.Token;
-import org.apache.iotdb.infludb.influxql.expr.BinaryExpr;
-import org.apache.iotdb.infludb.influxql.expr.Expr;
-import org.apache.iotdb.infludb.influxql.expr.ParenExpr;
-import org.apache.iotdb.infludb.influxql.expr.VarRef;
-import org.apache.iotdb.session.SessionDataSet;
+import org.apache.iotdb.infludb.qp.constant.FilterConstant;
+import org.apache.iotdb.infludb.qp.logical.crud.BasicFunctionOperator;
+import org.apache.iotdb.infludb.qp.logical.crud.Condition;
+import org.apache.iotdb.infludb.qp.logical.crud.FilterOperator;
 import org.apache.iotdb.tsfile.read.common.Field;
 import org.influxdb.dto.QueryResult;
 
@@ -196,71 +192,60 @@ public final class IotDBInfluxDBUtils {
     }
 
 
+
     /**
      * 判断该语法树的子树是否有or操作，如果没有均为and操作的话，则可以合并查询
      *
-     * @param expr 需要判断的子树
+     * @param operator 需要判断的子树
      * @return 是否可以合并查询
      */
-    public static boolean canMergeExpr(Expr expr) {
-        if (expr instanceof BinaryExpr binaryExpr) {
-            if (binaryExpr.Op == Token.OR) {
-                return false;
-            } else if (binaryExpr.Op == Token.AND) {
-                return canMergeExpr(binaryExpr.LHS) && canMergeExpr(binaryExpr.RHS);
-            } else {
-                return true;
-            }
-        } else if (expr instanceof ParenExpr parenExpr) {
-            return canMergeExpr(parenExpr.Expr);
-        } else {
+    public static boolean canMergeOperator(FilterOperator operator) {
+        if (operator instanceof BasicFunctionOperator) {
             return true;
+        } else {
+            if (operator.getFilterType() == FilterConstant.FilterType.KW_OR) {
+                return false;
+            } else {
+                FilterOperator leftOperator = operator.getChildOperators().get(0);
+                FilterOperator rightOperator = operator.getChildOperators().get(1);
+                return canMergeOperator(leftOperator) && canMergeOperator(rightOperator);
+            }
         }
     }
 
     /**
      * 通过语法树来生成查询条件（如果进入这个函数，说明一定是可以合并的语法树，不存在or的情况）
      *
-     * @param expr 需要生成查询条件的语法树
+     * @param filterOperator 需要生成查询条件的语法树
      * @return 条件列表
      */
-    public static List<Condition> getConditionsByExpr(Expr expr) {
-        if (expr instanceof ParenExpr parenExpr) {
-            return getConditionsByExpr(parenExpr.Expr);
-        } else if (expr instanceof BinaryExpr binaryExpr) {
-            if (binaryExpr.Op == Token.AND) {
-                List<Condition> conditions1 = getConditionsByExpr(binaryExpr.LHS);
-                List<Condition> conditions2 = getConditionsByExpr(binaryExpr.RHS);
-                assert conditions1 != null;
-                assert conditions2 != null;
-                conditions1.addAll(conditions2);
-                return conditions1;
-            } else {
-                //一定会是非or的情况
-                List<Condition> conditions = new ArrayList<>();
-                conditions.add(getConditionForSingleExpr(binaryExpr));
-                return conditions;
-            }
+    public static List<Condition> getConditionsByFilterOperatorOperator(FilterOperator filterOperator) {
+        if (filterOperator instanceof BasicFunctionOperator) {
+            //一定会是非or的情况
+            List<Condition> conditions = new ArrayList<>();
+            conditions.add(getConditionForBasicFunctionOperator((BasicFunctionOperator) filterOperator));
+            return conditions;
+        } else {
+            FilterOperator leftOperator = filterOperator.getChildOperators().get(0);
+            FilterOperator rightOperator = filterOperator.getChildOperators().get(1);
+            List<Condition> conditions1 = getConditionsByFilterOperatorOperator(leftOperator);
+            List<Condition> conditions2 = getConditionsByFilterOperatorOperator(rightOperator);
+            conditions1.addAll(conditions2);
+            return conditions1;
         }
-        return null;
     }
 
     /**
      * 通过唯一条件的子树来生成条件
      *
-     * @param binaryExpr 需要生成条件的子树
+     * @param basicFunctionOperator 需要生成条件的子树
      * @return 对应的条件
      */
-    public static Condition getConditionForSingleExpr(BinaryExpr binaryExpr) {
+    public static Condition getConditionForBasicFunctionOperator(BasicFunctionOperator basicFunctionOperator) {
         Condition condition = new Condition();
-        condition.setToken(binaryExpr.Op);
-        if (binaryExpr.LHS instanceof VarRef varRef) {
-            condition.setValue(varRef.Val);
-            condition.setLiteral((binaryExpr.RHS).toString());
-        } else if (binaryExpr.RHS instanceof VarRef varRef) {
-            condition.setValue(varRef.Val);
-            condition.setLiteral((binaryExpr.LHS).toString());
-        }
+        condition.setFilterType(basicFunctionOperator.getFilterType());
+        condition.setValue(basicFunctionOperator.getKeyName());
+        condition.setLiteral(basicFunctionOperator.getValue());
         return condition;
     }
 
