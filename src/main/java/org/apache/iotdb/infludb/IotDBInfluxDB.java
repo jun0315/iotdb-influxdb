@@ -195,6 +195,9 @@ public class IotDBInfluxDB {
     public QueryResult query(Query query) throws Exception {
         String sql = query.getCommand();
         String database = query.getDatabase();
+        if (!this.database.equals(database)) {
+            updateDatabase(database);
+        }
         Operator operator = LogicalGenerator.generate(sql);
         if (operator instanceof QueryOperator) {
             updateMeasurement(((QueryOperator) operator).getFromComponent().getNodeName().get(0));
@@ -327,8 +330,6 @@ public class IotDBInfluxDB {
     }
 
 
-    //
-
     /**
      * 通过条件获取查询Influxdb格式的查询结果
      *
@@ -380,47 +381,123 @@ public class IotDBInfluxDB {
         }
         //实际的查询sql语句
         String realQuerySql;
-        //没有iotdb的where过滤条件
-        QueryResult queryResult = null;
-        if (realIotDBCondition.isEmpty()) {
-            realQuerySql = ("select * from " + curQueryPath);
-            SessionDataSet sessionDataSet = session.executeQueryStatement(realQuerySql);
-            queryResult = iotdbResultCvtToInfluxdbResult(sessionDataSet);
-            System.out.println(sessionDataSet.toString());
-        } else {
-            //有了过滤条件，只能多次遍历
-            QueryResult lastQueryResult = null;
-            for (int i = currentQueryMaxTagNum; i <= measurementTagNum; i++) {
-                if (i != currentQueryMaxTagNum) {
-                    curQueryPath.append(".*");
-                }
-                realQuerySql = ("select * from " + curQueryPath + " where " + realIotDBCondition);
-                SessionDataSet sessionDataSet = null;
-                try {
-                    sessionDataSet = session.executeQueryStatement(realQuerySql);
-                } catch (StatementExecutionException e) {
-                    if (e.getStatusCode() == 411) {
-                        //where的timeseries没有匹配的话，会抛出411的错误，将其拦截打印
-                        System.out.println(e.getMessage());
-                    } else {
-                        throw e;
-                    }
-                }
-                //暂时的转换结果
-                QueryResult tmpQueryResult = iotdbResultCvtToInfluxdbResult(sessionDataSet);
-                //如果是第一次，则直接赋值，不需要or操作
-                if (i == currentQueryMaxTagNum) {
-                    lastQueryResult = tmpQueryResult;
-                } else {
-                    //进行add操作
-                    lastQueryResult = IotDBInfluxDBUtils.addQueryResultProcess(lastQueryResult, tmpQueryResult);
-                }
-            }
-            queryResult = lastQueryResult;
+
+        realQuerySql = "select * from " + curQueryPath;
+        if (!realIotDBCondition.isEmpty()) {
+            realQuerySql += " where " + realIotDBCondition;
         }
-        return queryResult;
+        realQuerySql += " align by device";
+        SessionDataSet sessionDataSet = session.executeQueryStatement(realQuerySql);
+        return iotdbAlignByDeviceResultCvtToInfluxdbResult(sessionDataSet);
+//        if (realIotDBCondition.isEmpty()) {
+//            realQuerySql = ("select * from " + curQueryPath);
+//            SessionDataSet sessionDataSet = session.executeQueryStatement(realQuerySql);
+//            queryResult = iotdbResultCvtToInfluxdbResult(sessionDataSet);
+//            System.out.println(sessionDataSet.toString());
+//        } else {
+//            //有了过滤条件，只能多次遍历
+//            QueryResult lastQueryResult = null;
+//            for (int i = currentQueryMaxTagNum; i <= measurementTagNum; i++) {
+//                if (i != currentQueryMaxTagNum) {
+//                    curQueryPath.append(".*");
+//                }
+//                realQuerySql = ("select * from " + curQueryPath + " where " + realIotDBCondition + " align by device");
+//                SessionDataSet sessionDataSet = null;
+//                try {
+//                    sessionDataSet = session.executeQueryStatement(realQuerySql);
+//                } catch (StatementExecutionException e) {
+//                    if (e.getStatusCode() == 411) {
+//                        //where的timeseries没有匹配的话，会抛出411的错误，将其拦截打印
+//                        System.out.println(e.getMessage());
+//                    } else {
+//                        throw e;
+//                    }
+//                }
+//                //暂时的转换结果
+//                QueryResult tmpQueryResult = iotdbResultCvtToInfluxdbResult(sessionDataSet);
+//                //如果是第一次，则直接赋值，不需要or操作
+//                if (i == currentQueryMaxTagNum) {
+//                    lastQueryResult = tmpQueryResult;
+//                } else {
+//                    //进行add操作
+//                    lastQueryResult = IotDBInfluxDBUtils.addQueryResultProcess(lastQueryResult, tmpQueryResult);
+//                }
+//            }
+//            queryResult = lastQueryResult;
+//        }
     }
 
+
+    /**
+     * 将iotdb的查询结果转换为influxdb的查询结果
+     *
+     * @param sessionDataSet 待转换的iotdb查询结果
+     * @return influxdb格式的查询结果
+     */
+    private QueryResult iotdbAlignByDeviceResultCvtToInfluxdbResult(SessionDataSet sessionDataSet) throws IoTDBConnectionException, StatementExecutionException {
+        if (sessionDataSet == null) {
+            return IotDBInfluxDBUtils.getNullQueryResult();
+        }
+        //生成series
+        QueryResult.Series series = new QueryResult.Series();
+        series.setName(measurement);
+        //获取tag的反向map
+        Map<Integer, String> tagOrderReversed = tagOrders.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+        int tagSize = tagOrderReversed.size();
+        ArrayList<String> tagList = new ArrayList<>();
+        for (int i = 1; i <= tagSize; i++) {
+            tagList.add(tagOrderReversed.get(i));
+        }
+
+        ArrayList<String> fieldList = new ArrayList<>();
+        for (int i = 1 + tagSize; i < 1 + tagSize + fieldOrders.size(); i++) {
+            fieldList.add(fieldOrdersReversed.get(i));
+        }
+        ArrayList<String> columns = new ArrayList<>();
+        columns.add("time");
+        columns.addAll(tagList);
+        columns.addAll(fieldList);
+        //把columns插入series中
+        series.setColumns(columns);
+
+        List<List<Object>> values = new ArrayList<>();
+
+        List<String> iotdbResultColumn = sessionDataSet.getColumnNames();
+        while (sessionDataSet.hasNext()) {
+            Object[] value = new Object[columns.size()];
+
+            RowRecord record = sessionDataSet.next();
+            List<org.apache.iotdb.tsfile.read.common.Field> fields = record.getFields();
+
+            value[0] = record.getTimestamp();
+
+            String deviceName = fields.get(0).getStringValue();
+            String[] deviceNameList = deviceName.split("\\.");
+            for (int i = 3; i < deviceNameList.length; i++) {
+                if (!deviceNameList[i].equals(placeholder)) {
+                    value[i - 2] = deviceNameList[i];
+                }
+            }
+            for (int i = 1; i < fields.size(); i++) {
+                Object o = IotDBInfluxDBUtils.iotdbFiledCvt(fields.get(i));
+                if (o != null) {
+                    //将filed的值插入其中
+                    value[fieldOrders.get(iotdbResultColumn.get(i + 1))] = o;
+                }
+            }
+            //插入实际的value
+            values.add(Arrays.asList(value));
+        }
+        series.setValues(values);
+
+        QueryResult queryResult = new QueryResult();
+        QueryResult.Result result = new QueryResult.Result();
+        result.setSeries(new ArrayList<>(Arrays.asList(series)));
+        queryResult.setResults(new ArrayList<>(Arrays.asList(result)));
+
+        return queryResult;
+    }
 
     /**
      * 将iotdb的查询结果转换为influxdb的查询结果
@@ -562,7 +639,7 @@ public class IotDBInfluxDB {
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         Point point = builder.build();
         //build构造完成，开始write
-        iotDBInfluxDB.write(point);
+//        iotDBInfluxDB.write(point);
 
         builder = Point.measurement("student");
         tags = new HashMap<>();
@@ -577,7 +654,7 @@ public class IotDBInfluxDB {
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         point = builder.build();
         //插入两条数据，便于验证复杂查询
-        iotDBInfluxDB.write(point);
+//        iotDBInfluxDB.write(point);
 
         //开始查询
         Query query = new Query("select * from student where (name=\"xie\" and sex=\"fm\")or score<99", "database");
