@@ -215,7 +215,7 @@ public class IotDBInfluxDB {
         //step1 生成查询的结果
         QueryResult queryResult = queryExpr(((QueryOperator) operator).getWhereComponent().getFilterOperator());
         //step2 进行select筛选
-//        ProcessSelectComponent(queryResult, ((QueryOperator) operator).getSelectComponent());
+        ProcessSelectComponent(queryResult, ((QueryOperator) operator).getSelectComponent());
         return queryResult;
     }
 
@@ -278,7 +278,7 @@ public class IotDBInfluxDB {
                     NodeExpression parmaExpression = (NodeExpression) expressions.get(0);
                     String parmaName = parmaExpression.getName();
                     if (columnOrders.containsKey(parmaName)) {
-                        aggregation.updateValue(new AggregationValue(value.get(columnOrders.get(parmaName)), (Integer) value.get(0)));
+                        aggregation.updateValue(new AggregationValue(value.get(columnOrders.get(parmaName)), (Long) value.get(0)));
                     }
                 }
             }
@@ -728,7 +728,7 @@ public class IotDBInfluxDB {
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         Point point = builder.build();
         //build构造完成，开始write
-        iotDBInfluxDB.write(point);
+//        iotDBInfluxDB.write(point);
 
         builder = Point.measurement("student");
         tags = new HashMap<>();
@@ -746,8 +746,13 @@ public class IotDBInfluxDB {
 //        iotDBInfluxDB.write(point);
 
         //开始查询
-        Query query = new Query("select * from student where (name=\"xie\" and sex=\"fm\")or score<99", "database");
+        Query query = new Query("select max(score) from student where (name=\"xie\" and sex=\"fm\")or score<99", "database");
         QueryResult result = iotDBInfluxDB.query(query);
+        System.out.println(result.toString());
+
+        //聚合查询
+        query = new Query("select max(score) from student where (name=\"xie\" and sex=\"fm\")or score<99", "database");
+        result = iotDBInfluxDB.query(query);
         System.out.println(result.toString());
     }
 }

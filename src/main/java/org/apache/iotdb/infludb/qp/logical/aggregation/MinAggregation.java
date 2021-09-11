@@ -5,11 +5,11 @@ import org.apache.iotdb.infludb.query.expression.Expression;
 import java.util.List;
 
 public class MinAggregation implements Aggregation {
-    private Double doubleValue;
-    private String stringValue;
+    private Double doubleValue = Double.MAX_VALUE;
+    private String stringValue = null;
     private boolean isNumber = false;
     private boolean isString = false;
-    private int timestamp;
+    private Long timestamp;
 
     private List<Expression> expressionList;
 
@@ -23,7 +23,7 @@ public class MinAggregation implements Aggregation {
     @Override
     public void updateValue(AggregationValue aggregationValue) {
         Object value = aggregationValue.getValue();
-        int timestamp = aggregationValue.getTimestamp();
+        Long timestamp = aggregationValue.getTimestamp();
         if (value instanceof Number) {
             if (!isNumber) {
                 isNumber = true;
@@ -34,13 +34,17 @@ public class MinAggregation implements Aggregation {
                 this.timestamp = timestamp;
             }
         } else if (value instanceof String) {
+            String tmpValue = (String) value;
             if (!isString) {
                 isString = true;
-            }
-            String tmpValue = (String) value;
-            if (tmpValue.compareTo(this.stringValue) <= 0) {
                 stringValue = tmpValue;
                 this.timestamp = timestamp;
+            } else {
+                if (tmpValue.compareTo(this.stringValue) <= 0) {
+                    stringValue = tmpValue;
+                    this.timestamp = timestamp;
+                }
+
             }
         }
     }

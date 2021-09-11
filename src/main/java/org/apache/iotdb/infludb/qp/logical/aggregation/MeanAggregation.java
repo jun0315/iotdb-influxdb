@@ -32,7 +32,7 @@ public class MeanAggregation implements Aggregation {
 
     @Override
     public AggregationValue calculate() {
-        return new AggregationValue(String.valueOf(this.value / sum), 0);
+        return new AggregationValue(String.valueOf(this.value / sum), 0L);
     }
 
     @Override
