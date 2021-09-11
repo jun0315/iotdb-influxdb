@@ -158,6 +158,26 @@ public final class IotDBInfluxDBUtils {
     }
 
     /**
+     * 将新的values更新到influxdb的查询结果中
+     *
+     * @param queryResult  待更新的influxdb查询结果
+     * @param columns      待更新的columns
+     * @param updateValues 待更新的values
+     */
+    public static void updateQueryResultColumnValue(QueryResult queryResult, List<String> columns, List<List<Object>> updateValues) {
+        List<QueryResult.Result> results = queryResult.getResults();
+        QueryResult.Result result = results.get(0);
+        List<QueryResult.Series> series = results.get(0).getSeries();
+        QueryResult.Series serie = series.get(0);
+
+        serie.setValues(updateValues);
+        serie.setColumns(columns);
+        series.set(0, serie);
+        result.setSeries(series);
+        results.set(0, result);
+    }
+
+    /**
      * 检查两个influxdb的查询结果是否属于同一个查询，即measurement和columns是否一致
      *
      * @param queryResult1 待检查结果1
@@ -190,7 +210,6 @@ public final class IotDBInfluxDBUtils {
         }
         return true;
     }
-
 
 
     /**

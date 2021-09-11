@@ -1,6 +1,6 @@
 package org.apache.iotdb.infludb.query.expression.unary;
 
-import  org.apache.iotdb.infludb.query.expression.Expression;
+import org.apache.iotdb.infludb.query.expression.Expression;
 
 import java.util.*;
 
@@ -14,10 +14,13 @@ public class FunctionExpression implements Expression {
     private String expressionString;
     private String parametersString;
 
+    private final boolean isAggregationFunctionExpression;
+
     public FunctionExpression(String functionName) {
         this.functionName = functionName;
         functionAttributes = new LinkedHashMap<>();
         expressions = new ArrayList<>();
+        isAggregationFunctionExpression = true;
     }
 
 

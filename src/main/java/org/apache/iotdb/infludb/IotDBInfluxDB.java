@@ -1,18 +1,25 @@
 package org.apache.iotdb.infludb;
 
 import org.apache.iotdb.infludb.qp.constant.FilterConstant;
+import org.apache.iotdb.infludb.qp.constant.SQLConstant;
 import org.apache.iotdb.infludb.qp.logical.Operator;
-import org.apache.iotdb.infludb.qp.logical.crud.BasicFunctionOperator;
-import org.apache.iotdb.infludb.qp.logical.crud.Condition;
-import org.apache.iotdb.infludb.qp.logical.crud.FilterOperator;
-import org.apache.iotdb.infludb.qp.logical.crud.QueryOperator;
+import org.apache.iotdb.infludb.qp.logical.aggregation.Aggregation;
+import org.apache.iotdb.infludb.qp.logical.aggregation.AggregationFactory;
+import org.apache.iotdb.infludb.qp.logical.aggregation.AggregationValue;
+import org.apache.iotdb.infludb.qp.logical.crud.*;
 import org.apache.iotdb.infludb.qp.strategy.LogicalGenerator;
+import org.apache.iotdb.infludb.query.expression.Expression;
+import org.apache.iotdb.infludb.query.expression.ResultColumn;
+import org.apache.iotdb.infludb.query.expression.unary.FunctionExpression;
+import org.apache.iotdb.infludb.query.expression.unary.NodeExpression;
 import org.apache.iotdb.rpc.IoTDBConnectionException;
 import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.session.Session;
 import org.apache.iotdb.session.SessionDataSet;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.apache.iotdb.tsfile.read.common.RowRecord;
+import org.influxdb.InfluxDB;
+import org.influxdb.InfluxDBFactory;
 import org.influxdb.dto.*;
 
 import java.lang.reflect.Field;
@@ -199,12 +206,94 @@ public class IotDBInfluxDB {
             updateDatabase(database);
         }
         Operator operator = LogicalGenerator.generate(sql);
-        if (operator instanceof QueryOperator) {
-            updateMeasurement(((QueryOperator) operator).getFromComponent().getNodeName().get(0));
-            updateFiledOrders();
-            return queryExpr(((QueryOperator) operator).getWhereComponent().getFilterOperator());
+        if (!(operator instanceof QueryOperator)) {
+            throw new IllegalArgumentException("not query sql");
         }
-        throw new IllegalArgumentException("not query sql");
+        //更新相关数据
+        updateMeasurement(((QueryOperator) operator).getFromComponent().getNodeName().get(0));
+        updateFiledOrders();
+        //step1 生成查询的结果
+        QueryResult queryResult = queryExpr(((QueryOperator) operator).getWhereComponent().getFilterOperator());
+        //step2 进行select筛选
+//        ProcessSelectComponent(queryResult, ((QueryOperator) operator).getSelectComponent());
+        return queryResult;
+    }
+
+    private void ProcessSelectComponent(QueryResult queryResult, SelectComponent selectComponent) {
+        if (selectComponent.isHasAggregationFunction() && selectComponent.isHasCommonQuery()) {
+            throw new IllegalArgumentException("ERR: mixing multiple selector functions with tags or fields is not supported");
+        }
+        //先获取当前数据结果的行顺序map
+        List<String> columns = queryResult.getResults().get(0).getSeries().get(0).getColumns();
+        Map<String, Integer> columnOrders = new HashMap<>();
+        for (int i = 0; i < columns.size(); i++) {
+            columnOrders.put(columns.get(i), i);
+        }
+        //获取当前values
+        List<List<Object>> values = queryResult.getResults().get(0).getSeries().get(0).getValues();
+        //新的行列表
+        List<String> newColumns = new ArrayList<>();
+        //当是常规查询时
+        if (selectComponent.isHasCommonQuery()) {
+            //如果已经是包含了star查询，把当前所以结果保存过来
+            if (selectComponent.isHasStarQuery()) {
+                newColumns = columns;
+            }
+            //新的添加行列表
+            List<String> newAddColumns = new ArrayList<>();
+            //开始遍历select的范围
+            for (ResultColumn resultColumn : selectComponent.getResultColumns()) {
+                Expression expression = resultColumn.getExpression();
+                if (expression instanceof NodeExpression) {
+                    //非star的情况
+                    if (!((NodeExpression) expression).getName().equals(SQLConstant.STAR)) {
+                        newAddColumns.add(((NodeExpression) expression).getName());
+                    }
+                }
+            }
+            for (List<Object> value : values) {
+                for (String newAddColumn : newAddColumns) {
+                    value.add(value.get(columnOrders.get(newAddColumn)));
+                }
+            }
+            //添加到最后的newColumns中
+            newColumns.addAll(newAddColumns);
+        }
+        //当是聚合查询的时候，应该全是聚合查询
+        else if (selectComponent.isHasAggregationFunction()) {
+            newColumns.add(SQLConstant.RESERVED_TIME);
+            List<Aggregation> aggregations = new ArrayList<>();
+            for (ResultColumn resultColumn : selectComponent.getResultColumns()) {
+                FunctionExpression expression = (FunctionExpression) resultColumn.getExpression();
+                String functionName = expression.getFunctionName();
+                newColumns.add(functionName);
+                aggregations.add(AggregationFactory.generateAggregation(functionName, expression.getExpressions()));
+            }
+            for (List<Object> value : values) {
+                for (Aggregation aggregation : aggregations) {
+                    List<Expression> expressions = aggregation.getExpressions();
+                    if (expressions == null) {
+                        throw new IllegalArgumentException("not support param");
+                    }
+                    NodeExpression parmaExpression = (NodeExpression) expressions.get(0);
+                    String parmaName = parmaExpression.getName();
+                    if (columnOrders.containsKey(parmaName)) {
+                        aggregation.updateValue(new AggregationValue(value.get(columnOrders.get(parmaName)), (Integer) value.get(0)));
+                    }
+                }
+            }
+            values = new ArrayList<>();
+            List<Object> value = new ArrayList<>();
+            for (Aggregation aggregation : aggregations) {
+                value.add(0, aggregation.calculate().getTimestamp());
+                value.add(aggregation.calculate().getValue());
+            }
+            if (selectComponent.isHasMoreAggregationFunction()) {
+                value.add(0, 0);
+            }
+            values.add(value);
+        }
+        IotDBInfluxDBUtils.updateQueryResultColumnValue(queryResult, newColumns, values);
     }
 
 
@@ -631,7 +720,7 @@ public class IotDBInfluxDB {
         Map<String, String> tags = new HashMap<>();
         Map<String, Object> fields = new HashMap<>();
         tags.put("name", "xie");
-        tags.put("sex", "m");
+        tags.put("address", "t");
         fields.put("score", "87");
         fields.put("tel", 110);
         builder.tag(tags);
@@ -639,7 +728,7 @@ public class IotDBInfluxDB {
         builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
         Point point = builder.build();
         //build构造完成，开始write
-//        iotDBInfluxDB.write(point);
+        iotDBInfluxDB.write(point);
 
         builder = Point.measurement("student");
         tags = new HashMap<>();
