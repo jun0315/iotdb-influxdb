@@ -6,9 +6,7 @@ import org.apache.iotdb.infludb.qp.logical.crud.*;
 import org.apache.iotdb.tsfile.read.common.Field;
 import org.influxdb.dto.QueryResult;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 public final class IotDBInfluxDBUtils {
 
@@ -406,5 +404,27 @@ public final class IotDBInfluxDBUtils {
         if (selectComponent.isHasAggregationFunction() && selectComponent.isHasCommonQuery()) {
             throw new IllegalArgumentException("ERR: mixing aggregate and non-aggregate queries is not supported");
         }
+    }
+
+    /**
+     * 去除字符串列表重名
+     *
+     * @param strings 需要去除重名的字符串列表
+     * @return 去重后的字符串列表
+     */
+    public static List<String> removeDuplicate(List<String> strings) {
+        Map<String, Integer> nameNums = new HashMap<>();
+        List<String> result = new ArrayList<>();
+        for (String tmpString : strings) {
+            if (!nameNums.containsKey(tmpString)) {
+                nameNums.put(tmpString, 1);
+                result.add(tmpString);
+            } else {
+                int nums = nameNums.get(tmpString);
+                result.add(tmpString + "_" + nums);
+                nameNums.put(tmpString, nums + 1);
+            }
+        }
+        return result;
     }
 }

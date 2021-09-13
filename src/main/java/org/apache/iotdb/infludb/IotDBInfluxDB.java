@@ -276,9 +276,9 @@ public class IotDBInfluxDB {
             if (selectComponent.isHasCommonQuery()) {
                 Selector selector = (Selector) functions.get(0);
                 List<Object> relatedValue = selector.getRelatedValues();
-                for (String column : columns) {
+                for (String column : newColumns) {
                     if (SQLConstant.getNativeSelectorFunctionNames().contains(column)) {
-                        value.add(selector.calculate());
+                        value.add(selector.calculate().getValue());
                     } else {
                         value.add(relatedValue.get(columnOrders.get(column)));
                     }
@@ -320,7 +320,7 @@ public class IotDBInfluxDB {
                 }
             }
         }
-        IotDBInfluxDBUtils.updateQueryResultColumnValue(queryResult, newColumns, values);
+        IotDBInfluxDBUtils.updateQueryResultColumnValue(queryResult, IotDBInfluxDBUtils.removeDuplicate(newColumns), values);
     }
 
 
