@@ -65,6 +65,7 @@ public class SQLConstant {
 
     public static final String COUNT = "count";
     public static final String AVG = "avg";
+    public static final String MEAN = "mean";
     public static final String SUM = "sum";
 
     public static final String ALL = "all";
@@ -76,9 +77,17 @@ public class SQLConstant {
                             MAX,
                             FIRST,
                             LAST,
-                            COUNT,
-                            SUM,
-                            AVG));
+                            MEAN
+                    ));
+
+    private static final Set<String> NATIVE_SELECTOR_FUNCTION_NAMES =
+            new HashSet<>(
+                    Arrays.asList(
+                            MIN,
+                            MAX,
+                            FIRST,
+                            LAST
+                    ));
 
     public static final int TOK_WHERE = 23;
     public static final int TOK_INSERT = 24;
@@ -236,5 +245,9 @@ public class SQLConstant {
 
     public static Set<String> getNativeFunctionNames() {
         return NATIVE_FUNCTION_NAMES;
+    }
+
+    public static Set<String> getNativeSelectorFunctionNames() {
+        return NATIVE_SELECTOR_FUNCTION_NAMES;
     }
 }

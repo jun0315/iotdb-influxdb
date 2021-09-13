@@ -41,8 +41,10 @@ public final class SelectComponent {
 
 
     private boolean hasAggregationFunction = false;
-    private boolean hasMoreAggregationFunction = false;
-    private boolean hasStarQuery = false;
+    private boolean hasSelectorFunction = false;
+    private boolean hasMoreSelectorFunction = false;
+    private boolean hasMoreFunction = false;
+    private boolean hasFunction = false;
     private boolean hasCommonQuery = false;
 
 
@@ -51,17 +53,23 @@ public final class SelectComponent {
         if (expression instanceof FunctionExpression) {
             String functionName = ((FunctionExpression) expression).getFunctionName();
             if (SQLConstant.getNativeFunctionNames().contains(functionName.toLowerCase())) {
-                if (hasAggregationFunction) {
-                    hasMoreAggregationFunction = true;
+                if (hasFunction) {
+                    hasMoreFunction = true;
                 } else {
-                    hasAggregationFunction = true;
+                    hasFunction = true;
                 }
+            }
+            if (SQLConstant.getNativeSelectorFunctionNames().contains(functionName.toLowerCase())) {
+                if (hasSelectorFunction) {
+                    hasMoreSelectorFunction = true;
+                } else {
+                    hasSelectorFunction = true;
+                }
+            } else {
+                hasAggregationFunction = true;
             }
         }
         if (expression instanceof NodeExpression) {
-            if (((NodeExpression) expression).getName().equals(SQLConstant.STAR)) {
-                hasStarQuery = true;
-            }
             hasCommonQuery = true;
         }
         resultColumns.add(resultColumn);
@@ -80,15 +88,24 @@ public final class SelectComponent {
         return hasAggregationFunction;
     }
 
-    public boolean isHasMoreAggregationFunction() {
-        return hasMoreAggregationFunction;
+    public boolean isHasMoreFunction() {
+        return hasMoreFunction;
     }
 
-    public boolean isHasStarQuery() {
-        return hasStarQuery;
-    }
 
     public boolean isHasCommonQuery() {
         return hasCommonQuery;
+    }
+
+    public boolean isHasSelectorFunction() {
+        return hasSelectorFunction;
+    }
+
+    public boolean isHasMoreSelectorFunction() {
+        return hasMoreSelectorFunction;
+    }
+
+    public boolean isHasFunction() {
+        return hasFunction;
     }
 }

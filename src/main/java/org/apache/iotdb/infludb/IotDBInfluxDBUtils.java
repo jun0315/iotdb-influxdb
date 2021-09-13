@@ -1,9 +1,8 @@
 package org.apache.iotdb.infludb;
 
 import org.apache.iotdb.infludb.qp.constant.FilterConstant;
-import org.apache.iotdb.infludb.qp.logical.crud.BasicFunctionOperator;
-import org.apache.iotdb.infludb.qp.logical.crud.Condition;
-import org.apache.iotdb.infludb.qp.logical.crud.FilterOperator;
+import org.apache.iotdb.infludb.qp.logical.Operator;
+import org.apache.iotdb.infludb.qp.logical.crud.*;
 import org.apache.iotdb.tsfile.read.common.Field;
 import org.influxdb.dto.QueryResult;
 
@@ -388,6 +387,24 @@ public final class IotDBInfluxDBUtils {
     public static void checkNonEmptyString(String string, String name) throws IllegalArgumentException {
         if (string == null || string.isEmpty()) {
             throw new IllegalArgumentException("Expecting a non-empty string for " + name);
+        }
+    }
+
+    /**
+     * 检查sql生成的operator是否为合法的查询语句，如果不合法，则抛出错误
+     *
+     * @param operator 需要检查的operator
+     */
+    public static void checkQueryOperator(Operator operator) {
+        if (!(operator instanceof QueryOperator)) {
+            throw new IllegalArgumentException("not query sql");
+        }
+        SelectComponent selectComponent = ((QueryOperator) operator).getSelectComponent();
+        if (selectComponent.isHasMoreSelectorFunction() && selectComponent.isHasCommonQuery()) {
+            throw new IllegalArgumentException("ERR: mixing multiple selector functions with tags or fields is not supported");
+        }
+        if (selectComponent.isHasAggregationFunction() && selectComponent.isHasCommonQuery()) {
+            throw new IllegalArgumentException("ERR: mixing aggregate and non-aggregate queries is not supported");
         }
     }
 }

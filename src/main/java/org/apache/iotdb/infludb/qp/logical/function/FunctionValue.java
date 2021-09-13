@@ -1,10 +1,10 @@
-package org.apache.iotdb.infludb.qp.logical.aggregation;
+package org.apache.iotdb.infludb.qp.logical.function;
 
-public class AggregationValue {
+public class FunctionValue {
     private Object value;
     private Long timestamp;
 
-    public AggregationValue(Object value, Long timestamp) {
+    public FunctionValue(Object value, Long timestamp) {
         this.value = value;
         this.timestamp = timestamp;
     }
