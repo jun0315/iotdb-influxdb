@@ -4,12 +4,13 @@ import kotlin.Pair;
 import org.apache.iotdb.infludb.query.expression.Expression;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ModeFunction extends Aggregate {
-    private Map<Object, Integer> valueOrders;
-    private Map<Object, Long> valueLastTimestamp;
+    private Map<Object, Integer> valueOrders = new HashMap<>();
+    private Map<Object, Long> valueLastTimestamp = new HashMap<>();
     private int maxNumber = 0;
     private Object maxObject = null;
 

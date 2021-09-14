@@ -2,11 +2,12 @@ package org.apache.iotdb.infludb.qp.logical.function;
 
 import org.apache.iotdb.infludb.query.expression.Expression;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public class MedianFunction extends Aggregate {
-    private List<Double> numbers;
+    private List<Double> numbers=new ArrayList<>();
 
     public MedianFunction(List<Expression> expressionList) {
         super(expressionList);

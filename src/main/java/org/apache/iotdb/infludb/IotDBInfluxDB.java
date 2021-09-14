@@ -280,7 +280,9 @@ public class IotDBInfluxDB {
                     if (SQLConstant.getNativeSelectorFunctionNames().contains(column)) {
                         value.add(selector.calculate().getValue());
                     } else {
-                        value.add(relatedValue.get(columnOrders.get(column)));
+                        if (relatedValue != null) {
+                            value.add(relatedValue.get(columnOrders.get(column)));
+                        }
                     }
                 }
             } else {
@@ -735,54 +737,4 @@ public class IotDBInfluxDB {
         throw new IllegalArgumentException("unknown operator " + operator.toString());
     }
 
-    public static void main(String[] args) throws Exception {
-        //初始化
-        var iotDBInfluxDB = new IotDBInfluxDB("http://127.0.0.1:6667", "root", "root");
-        //创建database
-        iotDBInfluxDB.createDatabase("database");
-        //设置database
-        iotDBInfluxDB.setDatabase("database");
-        //构造influxdb的插入build参数
-        Point.Builder builder = Point.measurement("student");
-        Map<String, String> tags = new HashMap<>();
-        Map<String, Object> fields = new HashMap<>();
-        tags.put("name", "xie");
-        tags.put("address", "t");
-        fields.put("score", "87");
-        fields.put("tel", 110);
-        builder.tag(tags);
-        builder.fields(fields);
-        builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
-        Point point = builder.build();
-        //build构造完成，开始write
-//        iotDBInfluxDB.write(point);
-
-        builder = Point.measurement("student");
-        tags = new HashMap<>();
-        fields = new HashMap<>();
-        tags.put("name", "xie");
-        tags.put("sex", "fm");
-        tags.put("province", "anhui");
-        fields.put("score", "99");
-        fields.put("country", "china");
-        builder.tag(tags);
-        builder.fields(fields);
-        builder.time(System.currentTimeMillis(), TimeUnit.MILLISECONDS);
-        point = builder.build();
-        //插入两条数据，便于验证复杂查询
-//        iotDBInfluxDB.write(point);
-
-        Query query;
-        QueryResult result;
-
-        //selector查询和field值并行
-        query = new Query("select max(score),* from student where (name=\"xie\" and sex=\"fm\")or score<99", "database");
-        result = iotDBInfluxDB.query(query);
-        System.out.println(result.getResults().get(0).getSeries().get(0).toString());
-
-        //聚合查询和selector查询并行
-        query = new Query("select mean(tel),max(score) from student where (name=\"xie\" and sex=\"fm\")or score<99", "database");
-        result = iotDBInfluxDB.query(query);
-        System.out.println(result.getResults().get(0).getSeries().get(0).toString());
-    }
 }
