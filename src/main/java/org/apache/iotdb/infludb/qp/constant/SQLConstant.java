@@ -66,6 +66,10 @@ public class SQLConstant {
     public static final String COUNT = "count";
     public static final String AVG = "avg";
     public static final String MEAN = "mean";
+    public static final String MEDIAN = "median";
+    public static final String MODE= "mode";
+    public static final String SPREAD= "spread";
+    public static final String STDDEV= "stddev";
     public static final String SUM = "sum";
 
     public static final String ALL = "all";
@@ -77,7 +81,13 @@ public class SQLConstant {
                             MAX,
                             FIRST,
                             LAST,
-                            MEAN
+                            MEAN,
+                            COUNT,
+                            MEDIAN,
+                            MODE,
+                            SPREAD,
+                            STDDEV,
+                            SUM
                     ));
 
     private static final Set<String> NATIVE_SELECTOR_FUNCTION_NAMES =
