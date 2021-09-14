@@ -22,11 +22,11 @@ public class InfluxDBExample {
         //设置database
         iotDBInfluxDB.setDatabase("database");
 
-//        insertData();
+        insertData();
         queryData();
     }
 
-
+    //插入数据
     public static void insertData() throws IoTDBConnectionException, StatementExecutionException {
 
         //构造influxdb的插入build参数
@@ -60,6 +60,7 @@ public class InfluxDBExample {
         iotDBInfluxDB.write(point);
     }
 
+    //查询数据
     private static void queryData() throws Exception {
 
         Query query;

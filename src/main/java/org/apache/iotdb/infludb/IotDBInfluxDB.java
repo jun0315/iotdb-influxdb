@@ -22,7 +22,6 @@ import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class IotDBInfluxDB {
@@ -161,7 +160,29 @@ public class IotDBInfluxDB {
         session.insertRecord(String.valueOf(path), time, measurements, types, values);
     }
 
-    //插入时出现新的tag，把新的tag更新到内存和数据库中
+    /**
+     * 兼容influxdb的查询函数
+     *
+     * @param query influxdb的查询参数，包括databaseName和sql语句
+     * @return 返回Influxdb的查询结果
+     */
+    public QueryResult query(Query query) throws Exception {
+        String sql = query.getCommand();
+        String database = query.getDatabase();
+        if (!this.database.equals(database)) {
+            updateDatabase(database);
+        }
+        Operator operator = LogicalGenerator.generate(sql);
+        IotDBInfluxDBUtils.checkQueryOperator(operator);
+        //更新相关数据
+        updateMeasurement(((QueryOperator) operator).getFromComponent().getNodeName().get(0));
+        updateFiledOrders();
+        //step1 生成查询的结果
+        QueryResult queryResult = queryExpr(((QueryOperator) operator).getWhereComponent().getFilterOperator());
+        //step2 进行select筛选
+        ProcessSelectComponent(queryResult, ((QueryOperator) operator).getSelectComponent());
+        return queryResult;
+    }
 
     /**
      * 当有新的tag出现时，插入到数据库中
@@ -189,30 +210,13 @@ public class IotDBInfluxDB {
         session.insertRecord("root.TAG_INFO", System.currentTimeMillis(), measurements, types, values);
     }
 
-    /**
-     * 兼容influxdb的查询函数
-     *
-     * @param query influxdb的查询参数，包括databaseName和sql语句
-     * @return 返回Influxdb的查询结果
-     */
-    public QueryResult query(Query query) throws Exception {
-        String sql = query.getCommand();
-        String database = query.getDatabase();
-        if (!this.database.equals(database)) {
-            updateDatabase(database);
-        }
-        Operator operator = LogicalGenerator.generate(sql);
-        IotDBInfluxDBUtils.checkQueryOperator(operator);
-        //更新相关数据
-        updateMeasurement(((QueryOperator) operator).getFromComponent().getNodeName().get(0));
-        updateFiledOrders();
-        //step1 生成查询的结果
-        QueryResult queryResult = queryExpr(((QueryOperator) operator).getWhereComponent().getFilterOperator());
-        //step2 进行select筛选
-        ProcessSelectComponent(queryResult, ((QueryOperator) operator).getSelectComponent());
-        return queryResult;
-    }
 
+    /**
+     * 通过select的查询条件进一步处理获得的queryResult
+     *
+     * @param queryResult     需要处理的查询结果
+     * @param selectComponent 需要过滤的select条件
+     */
     private void ProcessSelectComponent(QueryResult queryResult, SelectComponent selectComponent) {
         //先获取当前数据结果的行顺序map
         List<String> columns = queryResult.getResults().get(0).getSeries().get(0).getColumns();
@@ -507,6 +511,7 @@ public class IotDBInfluxDB {
         realQuerySql += " align by device";
         SessionDataSet sessionDataSet = session.executeQueryStatement(realQuerySql);
         return iotdbAlignByDeviceResultCvtToInfluxdbResult(sessionDataSet);
+        //下面的注释内容是采用非align by device的方案
 //        if (realIotDBCondition.isEmpty()) {
 //            realQuerySql = ("select * from " + curQueryPath);
 //            SessionDataSet sessionDataSet = session.executeQueryStatement(realQuerySql);
@@ -547,7 +552,7 @@ public class IotDBInfluxDB {
 
 
     /**
-     * 将iotdb的查询结果转换为influxdb的查询结果
+     * 将iotdb的align by device查询结果转换为influxdb的查询结果
      *
      * @param sessionDataSet 待转换的iotdb查询结果
      * @return influxdb格式的查询结果
