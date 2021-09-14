@@ -22,7 +22,7 @@ public class InfluxDBExample {
         //设置database
         iotDBInfluxDB.setDatabase("database");
 
-//        insertData();
+        insertData();
         queryData();
     }
 
