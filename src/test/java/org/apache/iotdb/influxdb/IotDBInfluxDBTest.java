@@ -133,33 +133,4 @@ public class IotDBInfluxDBTest {
         dataSet.closeOperationHandle();
     }
 
-    @Test
-    public void testInfluxDB() {
-        String a = null;
-        if (a == null) {
-            System.out.println("1");
-        }
-        InfluxDB influxDB = InfluxDBFactory.connect("http://localhost:8086", "root", "root");
-        influxDB.setDatabase("testdata");
-        QueryResult queryResult = influxDB.query(new Query("select * from cpu where sex =\"a\" ", "testdata"));
-        QueryResult t = new QueryResult();
-        ArrayList<Integer> tt = new ArrayList<>();
-        List list = Arrays.asList(1, 1, null, 3);
-        tt.addAll(list);
-
-//        QueryResult.Result r = new QueryResult.Result();
-//        t.setResults();
-        System.out.println(queryResult.toString());
-    }
-
-    @Test
-    public void testIotDB() throws IoTDBConnectionException, StatementExecutionException {
-
-        var r = session.executeQueryStatement("select * from root.database.student1");
-        while (r.hasNext()) {
-            var fields = r.next().getFields();
-            System.out.println(fields);
-        }
-
-    }
 }

@@ -145,7 +145,7 @@ public class IotDBInfluxDB {
         List<Object> values = new ArrayList<>();
         for (Map.Entry<String, Object> entry : fields.entrySet()) {
             measurements.add(entry.getKey());
-            var value = entry.getValue();
+            Object value = entry.getValue();
             if (value instanceof String) {
                 types.add(TSDataType.TEXT);
             } else if (value instanceof Integer) {
@@ -378,9 +378,9 @@ public class IotDBInfluxDB {
         try {
             session.setStorageGroup("root." + name);
         } catch (IoTDBConnectionException | StatementExecutionException e) {
-            if (e instanceof StatementExecutionException statementExecutionException && statementExecutionException.getStatusCode() == 300) {
+            if (e instanceof StatementExecutionException && ((StatementExecutionException) e).getStatusCode() == 300) {
                 //当前database已经被创建过
-                System.out.println(statementExecutionException.getMessage());
+                System.out.println(e.getMessage());
             } else {
                 e.printStackTrace();
             }
@@ -420,11 +420,11 @@ public class IotDBInfluxDB {
      */
     private void updateDatabase(String database) {
         try {
-            var result = session.executeQueryStatement("select * from root.TAG_INFO where database_name=" + String.format("\"%s\"", database));
+            SessionDataSet result = session.executeQueryStatement("select * from root.TAG_INFO where database_name=" + String.format("\"%s\"", database));
             Map<String, Integer> tagOrder = new HashMap<>();
             String measurementName = null;
             while (result.hasNext()) {
-                var fields = result.next().getFields();
+                List<org.apache.iotdb.tsfile.read.common.Field> fields = result.next().getFields();
                 String tmpMeasurementName = fields.get(1).getStringValue();
                 if (measurementName == null) {
                     //首次获取到measurementName
@@ -505,7 +505,7 @@ public class IotDBInfluxDB {
         String realQuerySql;
 
         realQuerySql = "select * from " + curQueryPath;
-        if (!realIotDBCondition.isEmpty()) {
+        if (!(realIotDBCondition.length() == 0)) {
             realQuerySql += " where " + realIotDBCondition;
         }
         realQuerySql += " align by device";
